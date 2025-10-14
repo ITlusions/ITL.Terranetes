@@ -31,6 +31,150 @@ Create chart name and version as used by the chart label.
 {{- end }}
 
 {{/*
+Keycloak helper functions
+*/}}
+
+{{/*
+Get Keycloak module by name
+*/}}
+{{- define "keycloak.getModule" -}}
+{{- $name := .name -}}
+{{- $modules := .context.Values.itl.modules.keycloak.modules -}}
+{{- range $modules -}}
+{{- if eq .name $name -}}
+{{- . | toYaml -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Generate Keycloak client configuration as YAML
+*/}}
+{{- define "keycloak.clientsYaml" -}}
+{{- if .Values.itl.keycloak.clients -}}
+{{- range .Values.itl.keycloak.clients -}}
+- name: {{ .name | quote }}
+  clientId: {{ .clientId | quote }}
+  enabled: {{ .enabled | default true }}
+  protocol: {{ .protocol | default "openid-connect" | quote }}
+  publicClient: {{ .publicClient | default false }}
+  standardFlowEnabled: {{ .standardFlowEnabled | default true }}
+  {{- if hasKey . "directAccessGrantsEnabled" }}
+  directAccessGrantsEnabled: {{ .directAccessGrantsEnabled }}
+  {{- end }}
+  {{- if hasKey . "serviceAccountsEnabled" }}
+  serviceAccountsEnabled: {{ .serviceAccountsEnabled }}
+  {{- end }}
+  {{- if .redirectUris }}
+  redirectUris:
+    {{- range .redirectUris }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  {{- if .roles }}
+  roles:
+    {{- range .roles }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Generate Keycloak groups configuration as YAML
+*/}}
+{{- define "keycloak.groupsYaml" -}}
+{{- if .Values.itl.keycloak.groups -}}
+{{- range .Values.itl.keycloak.groups -}}
+- name: {{ .name | quote }}
+  displayName: {{ .displayName | quote }}
+  {{- if .description }}
+  description: {{ .description | quote }}
+  {{- end }}
+  {{- if .realmRoles }}
+  realmRoles:
+    {{- range .realmRoles }}
+    - {{ . | quote }}
+    {{- end }}
+  {{- end }}
+  {{- if .clientRoles }}
+  clientRoles:
+    {{- range $client, $roles := .clientRoles }}
+    {{ $client }}:
+      {{- range $roles }}
+      - {{ . | quote }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Check if Keycloak module exists and is enabled
+*/}}
+{{- define "keycloak.moduleEnabled" -}}
+{{- $name := . -}}
+{{- $enabled := false -}}
+{{- range $.Values.itl.modules.keycloak.modules -}}
+{{- if and (eq .name $name) (.enabled | default true) -}}
+{{- $enabled = true -}}
+{{- break -}}
+{{- end -}}
+{{- end -}}
+{{- $enabled -}}
+{{- end -}}
+
+{{/*
+Generate Keycloak environment variables for Terraform modules
+*/}}
+{{- define "keycloak.envVars" -}}
+{{- if .Values.itl.keycloak.server.adminCredentials }}
+- name: KEYCLOAK_ADMIN_USERNAME
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.itl.keycloak.server.adminCredentials.secretName }}
+      key: {{ .Values.itl.keycloak.server.adminCredentials.usernameKey | default "username" }}
+- name: KEYCLOAK_ADMIN_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: {{ .Values.itl.keycloak.server.adminCredentials.secretName }}
+      key: {{ .Values.itl.keycloak.server.adminCredentials.passwordKey | default "password" }}
+{{- end }}
+{{- if and .Values.itl.keycloak.identityProviders.azureAD.enabled }}
+- name: AZURE_AD_CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: azure-ad-credentials
+      key: client-id
+- name: AZURE_AD_CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: azure-ad-credentials
+      key: client-secret
+- name: AZURE_AD_TENANT_ID
+  valueFrom:
+    secretKeyRef:
+      name: azure-ad-credentials
+      key: tenant-id
+{{- end }}
+{{- if and .Values.itl.keycloak.identityProviders.github.enabled }}
+- name: GITHUB_CLIENT_ID
+  valueFrom:
+    secretKeyRef:
+      name: github-oauth-credentials
+      key: client-id
+- name: GITHUB_CLIENT_SECRET
+  valueFrom:
+    secretKeyRef:
+      name: github-oauth-credentials
+      key: client-secret
+{{- end }}
+{{- end }}
+
+{{/*
 Common labels
 */}}
 {{- define "itl-terranetes.labels" -}}

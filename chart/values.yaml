@@ -157,10 +157,179 @@ itl:
   # ITL Keycloak integration
   keycloak:
     enabled: true
+    
+    # Keycloak server configuration
+    server:
+      enabled: true
+      # Keycloak server URL for ITL Academy
+      url: "https://sts.itlusions.com"
+      # Keycloak admin realm
+      adminRealm: "master"
+      # Reference to Keycloak admin credentials
+      adminCredentials:
+        secretName: "keycloak-admin-credentials"
+        usernameKey: "username"
+        passwordKey: "password"
+    
+    # ITL Academy realm configuration
+    realm:
+      name: "ITL-Academy"
+      displayName: "ITL Academy"
+      enabled: true
+      # Realm-specific settings
+      settings:
+        # User registration settings
+        registrationAllowed: false
+        registrationEmailAsUsername: true
+        rememberMe: true
+        verifyEmail: true
+        resetPasswordAllowed: true
+        # Session settings
+        ssoSessionIdleTimeout: 1800  # 30 minutes
+        ssoSessionMaxLifespan: 36000  # 10 hours
+        # Security settings
+        bruteForceProtected: true
+        failureFactor: 5
+        waitIncrementSeconds: 60
+        quickLoginCheckMilliSeconds: 1000
+        
     # Reference to the Keycloak client management we created
     clientManagement:
       enabled: true
       secretName: "keycloak-client-secrets"
+      
+    # Default clients for ITL applications
+    clients:
+      # Terranetes Controller client
+      - name: "terranetes-controller"
+        clientId: "terranetes-controller"
+        enabled: true
+        protocol: "openid-connect"
+        # Client access type
+        publicClient: false
+        standardFlowEnabled: true
+        directAccessGrantsEnabled: false
+        serviceAccountsEnabled: true
+        # Redirect URIs
+        redirectUris:
+          - "https://terraform.itlusions.com/*"
+          - "http://localhost:8080/*"
+        # Client roles
+        roles:
+          - "terraform-admin"
+          - "terraform-user"
+          - "terraform-viewer"
+          
+      # ITL Documentation Hub client
+      - name: "itl-docs-hub"
+        clientId: "itl-docs-hub"
+        enabled: true
+        protocol: "openid-connect"
+        publicClient: false
+        standardFlowEnabled: true
+        redirectUris:
+          - "https://docs.itlusions.com/*"
+        roles:
+          - "docs-admin"
+          - "docs-editor"
+          - "docs-viewer"
+          
+      # Student Portal client
+      - name: "student-portal"
+        clientId: "student-portal"
+        enabled: true
+        protocol: "openid-connect"
+        publicClient: true
+        standardFlowEnabled: true
+        redirectUris:
+          - "https://portal.itlusions.com/*"
+        roles:
+          - "student"
+          - "instructor"
+          - "admin"
+    
+    # User groups configuration
+    groups:
+      # ITL Staff groups
+      - name: "itl-staff"
+        displayName: "ITL Staff"
+        description: "Full access to ITL systems"
+        # Assign roles
+        realmRoles:
+          - "admin"
+        clientRoles:
+          terranetes-controller:
+            - "terraform-admin"
+          itl-docs-hub:
+            - "docs-admin"
+            
+      # Instructors group
+      - name: "instructors"
+        displayName: "Instructors"
+        description: "Course instructors with teaching privileges"
+        realmRoles:
+          - "instructor"
+        clientRoles:
+          terranetes-controller:
+            - "terraform-user"
+          itl-docs-hub:
+            - "docs-editor"
+          student-portal:
+            - "instructor"
+            
+      # Students group
+      - name: "students"
+        displayName: "Students"
+        description: "Course participants with limited access"
+        realmRoles:
+          - "student"
+        clientRoles:
+          terranetes-controller:
+            - "terraform-viewer"
+          itl-docs-hub:
+            - "docs-viewer"
+          student-portal:
+            - "student"
+    
+    # Identity providers configuration
+    identityProviders:
+      # Azure AD integration for ITL staff
+      azureAD:
+        enabled: true
+        alias: "azure-ad"
+        displayName: "ITL Azure AD"
+        # Azure AD configuration
+        config:
+          clientId: "${AZURE_AD_CLIENT_ID}"
+          clientSecret: "${AZURE_AD_CLIENT_SECRET}"
+          tenantId: "${AZURE_AD_TENANT_ID}"
+        # Default groups for Azure AD users
+        defaultGroups:
+          - "itl-staff"
+          
+      # GitHub integration for external instructors
+      github:
+        enabled: true
+        alias: "github"
+        displayName: "GitHub"
+        config:
+          clientId: "${GITHUB_CLIENT_ID}"
+          clientSecret: "${GITHUB_CLIENT_SECRET}"
+        # Default groups for GitHub users
+        defaultGroups:
+          - "instructors"
+    
+    # Theme configuration
+    theme:
+      # Use ITL-branded theme
+      name: "itlusions"
+      # Theme deployment
+      deployment:
+        enabled: true
+        # Reference to theme ConfigMap or Secret
+        source:
+          type: "configmap"
+          name: "keycloak-itl-theme"
     
   # ITL-specific providers
   providers:
@@ -223,16 +392,56 @@ itl:
     # Private ITL module registry
     registry:
       enabled: true
-      url: "git::https://github.com/ITL.Terraform.Modules/terraform-modules.git"
+      url: "git::https://github.com/itlusions/terraform-modules.git"
       
     # Common ITL modules
     common:
       - name: "azure-vm"
-        source: "git::https://github.com/ITL.Terraform.Modules/terraform-modules.git//azure-vm"
+        source: "git::https://github.com/itlusions/terraform-modules.git//azure-vm"
       - name: "azure-storage"
-        source: "git::https://github.com/ITL.Terraform.Modules/terraform-modules.git//azure-storage"
+        source: "git::https://github.com/itlusions/terraform-modules.git//azure-storage"
       - name: "kubernetes-namespace"
-        source: "git::https://github.com/ITL.Terraform.Modules/terraform-modules.git//k8s-namespace"
+        source: "git::https://github.com/itlusions/terraform-modules.git//k8s-namespace"
+        
+    # Keycloak modules for authentication and authorization
+    keycloak:
+      enabled: true
+      modules:
+        # Keycloak server deployment module
+        - name: "keycloak-server"
+          source: "git::https://github.com/itlusions/terraform-modules.git//keycloak/server"
+          description: "Deploy Keycloak server with ITL-specific configuration"
+          version: "v1.0.0"
+          
+        # Keycloak realm configuration module
+        - name: "keycloak-realm"
+          source: "git::https://github.com/itlusions/terraform-modules.git//keycloak/realm"
+          description: "Configure ITL Academy realm with users, groups, and roles"
+          version: "v1.0.0"
+          
+        # Keycloak client configuration module
+        - name: "keycloak-client"
+          source: "git::https://github.com/itlusions/terraform-modules.git//keycloak/client"
+          description: "Create and configure Keycloak clients for ITL applications"
+          version: "v1.0.0"
+          
+        # Keycloak identity provider module
+        - name: "keycloak-identity-provider"
+          source: "git::https://github.com/itlusions/terraform-modules.git//keycloak/identity-provider"
+          description: "Configure external identity providers (Azure AD, GitHub, etc.)"
+          version: "v1.0.0"
+          
+        # Keycloak theme module
+        - name: "keycloak-theme"
+          source: "git::https://github.com/itlusions/terraform-modules.git//keycloak/theme"
+          description: "Deploy ITL-branded Keycloak theme"
+          version: "v1.0.0"
+          
+        # Keycloak backup module
+        - name: "keycloak-backup"
+          source: "git::https://github.com/itlusions/terraform-modules.git//keycloak/backup"
+          description: "Configure automated backup for Keycloak data"
+          version: "v1.0.0"
 
 # Additional configurations for ITL deployment
 monitoring:

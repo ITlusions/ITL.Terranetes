@@ -1,0 +1,274 @@
+{{- if .Values.itl.keycloak.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-keycloak-config
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    component: keycloak-config
+data:
+  # Keycloak server configuration
+  keycloak-server-url: {{ .Values.itl.keycloak.server.url | quote }}
+  keycloak-realm: {{ .Values.itl.keycloak.realm.name | quote }}
+  
+  # Client configuration for Terranetes
+  {{- if .Values.itl.keycloak.clients }}
+  clients.yaml: |
+{{- include "keycloak.clientsYaml" . | nindent 4 }}
+  {{- end }}
+  
+  # Group configuration
+  {{- if .Values.itl.keycloak.groups }}
+  groups.yaml: |
+{{- include "keycloak.groupsYaml" . | nindent 4 }}
+  {{- end }}
+  
+  # Identity provider configuration
+  {{- if .Values.itl.keycloak.identityProviders }}
+  identity-providers.yaml: |
+    {{- if .Values.itl.keycloak.identityProviders.azureAD.enabled }}
+    azureAD:
+      alias: {{ .Values.itl.keycloak.identityProviders.azureAD.alias | quote }}
+      displayName: {{ .Values.itl.keycloak.identityProviders.azureAD.displayName | quote }}
+      enabled: true
+      {{- if .Values.itl.keycloak.identityProviders.azureAD.defaultGroups }}
+      defaultGroups:
+        {{- range .Values.itl.keycloak.identityProviders.azureAD.defaultGroups }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.itl.keycloak.identityProviders.github.enabled }}
+    github:
+      alias: {{ .Values.itl.keycloak.identityProviders.github.alias | quote }}
+      displayName: {{ .Values.itl.keycloak.identityProviders.github.displayName | quote }}
+      enabled: true
+      {{- if .Values.itl.keycloak.identityProviders.github.defaultGroups }}
+      defaultGroups:
+        {{- range .Values.itl.keycloak.identityProviders.github.defaultGroups }}
+        - {{ . | quote }}
+        {{- end }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+
+---
+{{- if .Values.itl.keycloak.server.adminCredentials }}
+# Reference to Keycloak admin credentials secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-keycloak-admin-ref
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    component: keycloak-credentials
+type: Opaque
+stringData:
+  # Reference to the actual admin credentials secret
+  admin-secret-name: {{ .Values.itl.keycloak.server.adminCredentials.secretName | quote }}
+  admin-username-key: {{ .Values.itl.keycloak.server.adminCredentials.usernameKey | default "username" | quote }}
+  admin-password-key: {{ .Values.itl.keycloak.server.adminCredentials.passwordKey | default "password" | quote }}
+{{- end }}
+
+---
+# Terranetes Configuration for Keycloak realm management
+apiVersion: terraform.appvia.io/v1alpha1
+kind: Configuration
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-keycloak-realm
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    component: keycloak-realm
+    managed-by: "terranetes-controller"
+spec:
+  {{- $realmModule := "" }}
+  {{- range .Values.itl.modules.keycloak.modules }}
+  {{- if eq .name "keycloak-realm" }}
+  {{- $realmModule = . }}
+  {{- break }}
+  {{- end }}
+  {{- end }}
+  module:
+    source: {{ $realmModule.source | quote }}
+    {{- if $realmModule.version }}
+    version: {{ $realmModule.version | quote }}
+    {{- end }}
+  
+  variables:
+    # Keycloak server configuration
+    - key: keycloak_url
+      value: {{ .Values.itl.keycloak.server.url | quote }}
+    - key: keycloak_admin_realm
+      value: {{ .Values.itl.keycloak.server.adminRealm | default "master" | quote }}
+    
+    # Realm configuration
+    - key: realm_name
+      value: {{ .Values.itl.keycloak.realm.name | quote }}
+    - key: realm_display_name
+      value: {{ .Values.itl.keycloak.realm.displayName | quote }}
+    - key: realm_enabled
+      value: {{ .Values.itl.keycloak.realm.enabled | default true | quote }}
+    
+    {{- if .Values.itl.keycloak.realm.settings }}
+    # Realm settings
+    {{- range $key, $value := .Values.itl.keycloak.realm.settings }}
+    - key: {{ printf "realm_%s" $key }}
+      value: {{ $value | quote }}
+    {{- end }}
+    {{- end }}
+    
+    # ITL organization information
+    - key: organization_name
+      value: {{ .Values.itl.organization.name | quote }}
+    - key: organization_domain
+      value: {{ .Values.itl.organization.domain | quote }}
+    - key: environment
+      value: {{ .Values.itl.environment.name | quote }}
+  
+  {{- if .Values.itl.keycloak.server.adminCredentials }}
+  envFrom:
+    - secretRef:
+        name: {{ .Values.itl.keycloak.server.adminCredentials.secretName }}
+  {{- end }}
+  
+  writeConnectionSecretsToRef:
+    name: {{ include "itl-terranetes.fullname" . }}-keycloak-realm-secrets
+    namespace: {{ .Values.global.namespace | default "terraform-system" }}
+
+---
+{{- if .Values.itl.keycloak.clients }}
+# Terranetes Configuration for Keycloak clients
+apiVersion: terraform.appvia.io/v1alpha1
+kind: Configuration
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-keycloak-clients
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    component: keycloak-clients
+    managed-by: "terranetes-controller"
+spec:
+  {{- $clientModule := "" }}
+  {{- range .Values.itl.modules.keycloak.modules }}
+  {{- if eq .name "keycloak-client" }}
+  {{- $clientModule = . }}
+  {{- break }}
+  {{- end }}
+  {{- end }}
+  module:
+    source: {{ $clientModule.source | quote }}
+    {{- if $clientModule.version }}
+    version: {{ $clientModule.version | quote }}
+    {{- end }}
+  
+  variables:
+    # Keycloak server configuration
+    - key: keycloak_url
+      value: {{ .Values.itl.keycloak.server.url | quote }}
+    - key: realm_name
+      value: {{ .Values.itl.keycloak.realm.name | quote }}
+    
+    # Clients configuration (passed as JSON)
+    - key: clients_config
+      value: |
+        {{- .Values.itl.keycloak.clients | toYaml | nindent 8 }}
+  
+  # Depend on realm creation
+  dependsOn:
+    - name: {{ include "itl-terranetes.fullname" . }}-keycloak-realm
+  
+  {{- if .Values.itl.keycloak.server.adminCredentials }}
+  envFrom:
+    - secretRef:
+        name: {{ .Values.itl.keycloak.server.adminCredentials.secretName }}
+  {{- end }}
+  
+  writeConnectionSecretsToRef:
+    name: {{ include "itl-terranetes.fullname" . }}-keycloak-client-secrets
+    namespace: {{ .Values.global.namespace | default "terraform-system" }}
+{{- end }}
+
+---
+{{- if .Values.itl.keycloak.identityProviders }}
+# Terranetes Configuration for Keycloak identity providers
+apiVersion: terraform.appvia.io/v1alpha1
+kind: Configuration
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-keycloak-identity-providers
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    component: keycloak-identity-providers
+    managed-by: "terranetes-controller"
+spec:
+  {{- $idpModule := "" }}
+  {{- range .Values.itl.modules.keycloak.modules }}
+  {{- if eq .name "keycloak-identity-provider" }}
+  {{- $idpModule = . }}
+  {{- break }}
+  {{- end }}
+  {{- end }}
+  module:
+    source: {{ $idpModule.source | quote }}
+    {{- if $idpModule.version }}
+    version: {{ $idpModule.version | quote }}
+    {{- end }}
+  
+  variables:
+    # Keycloak server configuration
+    - key: keycloak_url
+      value: {{ .Values.itl.keycloak.server.url | quote }}
+    - key: realm_name
+      value: {{ .Values.itl.keycloak.realm.name | quote }}
+    
+    # Identity providers configuration
+    {{- if .Values.itl.keycloak.identityProviders.azureAD.enabled }}
+    - key: enable_azure_ad
+      value: "true"
+    - key: azure_ad_alias
+      value: {{ .Values.itl.keycloak.identityProviders.azureAD.alias | quote }}
+    - key: azure_ad_display_name
+      value: {{ .Values.itl.keycloak.identityProviders.azureAD.displayName | quote }}
+    {{- end }}
+    
+    {{- if .Values.itl.keycloak.identityProviders.github.enabled }}
+    - key: enable_github
+      value: "true"
+    - key: github_alias
+      value: {{ .Values.itl.keycloak.identityProviders.github.alias | quote }}
+    - key: github_display_name
+      value: {{ .Values.itl.keycloak.identityProviders.github.displayName | quote }}
+    {{- end }}
+  
+  # Depend on realm and clients creation
+  dependsOn:
+    - name: {{ include "itl-terranetes.fullname" . }}-keycloak-realm
+    {{- if .Values.itl.keycloak.clients }}
+    - name: {{ include "itl-terranetes.fullname" . }}-keycloak-clients
+    {{- end }}
+  
+  {{- if .Values.itl.keycloak.server.adminCredentials }}
+  envFrom:
+    - secretRef:
+        name: {{ .Values.itl.keycloak.server.adminCredentials.secretName }}
+    # Also include identity provider credentials
+    {{- if .Values.itl.keycloak.identityProviders.azureAD.enabled }}
+    - secretRef:
+        name: azure-ad-credentials
+    {{- end }}
+    {{- if .Values.itl.keycloak.identityProviders.github.enabled }}
+    - secretRef:
+        name: github-oauth-credentials
+    {{- end }}
+  {{- end }}
+  
+  writeConnectionSecretsToRef:
+    name: {{ include "itl-terranetes.fullname" . }}-keycloak-idp-secrets
+    namespace: {{ .Values.global.namespace | default "terraform-system" }}
+{{- end }}
+
+{{- end }}

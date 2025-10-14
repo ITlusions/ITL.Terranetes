@@ -1,0 +1,295 @@
+# Default values for ITL Terranetes Controller
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Global configuration for ITL deployment
+global:
+  # ITL-specific namespace for terraform operations
+  namespace: terraform-system
+  # ITL cluster name for identification
+  clusterName: "itl-prod"
+  # Enable ITL-specific security policies
+  enableITLSecurity: true
+
+# Configuration for the official Terranetes Controller chart
+terranetes-controller:
+  enabled: true
+  
+  # Replica count for high availability
+  replicaCount: 2
+  
+  # Controller configuration
+  controller:
+    # Enable all security features for ITL deployment
+    enableNamespaceProtection: true
+    enableRevisionUpdateProtection: true
+    enableTerraformVersions: true
+    enableWatchers: true
+    enableWebhooks: true
+    enableContextInjection: true
+    
+    # Image configuration
+    images:
+      controller: "ghcr.io/appvia/terranetes-controller:v0.9.24"
+      executor: "ghcr.io/appvia/terranetes-executor:v0.9.24"
+      preload: "ghcr.io/appvia/terranetes-executor:v0.9.24"
+    
+    # Resource limits for production workload
+    resources:
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+    
+    # Default resource limits for executor containers
+    executor:
+      resources:
+        requests:
+          cpu: "10m"
+          memory: "64Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+    
+    # Security and policy configuration
+    policy:
+      # Use latest Checkov for security scanning
+      image: "bridgecrew/checkov:latest"
+      # Enable policy validation by default
+      enabled: true
+    
+    # Cost analysis configuration (optional)
+    costs:
+      enabled: false
+      # secret: infracost-api  # Uncomment if you have infracost API key
+    
+    # Backend configuration for Terraform state
+    backend:
+      # Use Kubernetes backend by default
+      type: "kubernetes"
+      # Custom backend configuration can be added here
+      # name: "custom-backend-secret"
+    
+    # Job configuration
+    job:
+      # Backoff limit for failed jobs
+      backoffLimit: 3
+      # TTL for completed jobs (6 hours)
+      ttlSecondsAfterFinished: 21600
+      # Additional labels for all jobs
+      labels:
+        managed-by: "itl-terranetes"
+        environment: "production"
+    
+    # Network policies and security
+    networkPolicy:
+      enabled: true
+    
+    podSecurityPolicy:
+      enabled: true
+    
+    # Service account configuration
+    serviceAccount:
+      create: true
+      name: "terranetes-controller"
+      annotations:
+        # Add any required annotations for cloud integration
+        # azure.workload.identity/client-id: "your-client-id"
+    
+    # Webhook configuration
+    webhooks:
+      # Auto-generate certificates
+      caSecret: ""
+      caBundle: ""
+      cert: ""
+      key: ""
+    
+    # Monitoring and observability
+    metrics:
+      enabled: true
+      port: 9090
+    
+    # Additional secrets that should be available to all jobs
+    executorSecrets: []
+    # - "cloud-credentials"
+    # - "custom-ca-certs"
+    
+    # Namespace filters (empty means all namespaces)
+    namespaceFilters: []
+    
+    # Drift detection configuration
+    drift:
+      enabled: true
+      interval: "3h"
+      threshold: 0.10
+    
+    # Configuration threshold (max percentage of configs running simultaneously)
+    configurationThreshold: 0.8
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 10080
+    
+  # Ingress configuration (disabled by default)
+  ingress:
+    enabled: false
+    className: ""
+    annotations: {}
+    hosts: []
+    tls: []
+
+# ITL-specific configurations and overrides
+itl:
+  # Organization settings
+  organization:
+    name: "ITlusions"
+    domain: "itlusions.com"
+
+  # Environment configuration
+  environment:
+    name: "production"
+    region: "westeurope"
+    
+  # ITL Keycloak integration
+  keycloak:
+    enabled: true
+    # Reference to the Keycloak client management we created
+    clientManagement:
+      enabled: true
+      secretName: "keycloak-client-secrets"
+    
+  # ITL-specific providers
+  providers:
+    # Enable cloud providers commonly used by ITL
+    azure:
+      enabled: true
+      secretName: "azure-credentials"
+    aws:
+      enabled: false
+      secretName: "aws-credentials"
+    google:
+      enabled: false
+      secretName: "gcp-credentials"
+      
+  # ITL-specific policies
+  policies:
+    # Security policies for ITL projects
+    security:
+      enabled: true
+      # Require specific security checks
+      requiredChecks:
+        - "CKV_AZURE_1"  # Ensure no secrets in ARM templates
+        - "CKV_AZURE_2"  # Ensure storage account access keys are secured
+        - "CKV_K8S_8"   # Liveness Probe Should be Configured
+        - "CKV_K8S_9"   # Readiness Probe Should be Configured
+      
+    # Cost management policies
+    cost:
+      enabled: true
+      # Maximum monthly cost threshold (in USD)
+      maxMonthlyCost: 1000
+      
+    # Compliance policies for educational environment
+    compliance:
+      enabled: true
+      standards:
+        - "azure-cis"
+        - "kubernetes-cis"
+        
+  # ITL-specific contexts for common configurations
+  contexts:
+    # Development environment context
+    development:
+      enabled: true
+      values:
+        environment: "dev"
+        costCenter: "education"
+        department: "ITL"
+        
+    # Production environment context  
+    production:
+      enabled: true
+      values:
+        environment: "prod"
+        costCenter: "operations"
+        department: "ITL"
+        
+  # ITL module repositories
+  modules:
+    # Private ITL module registry
+    registry:
+      enabled: true
+      url: "git::https://github.com/ITL.Terraform.Modules/terraform-modules.git"
+      
+    # Common ITL modules
+    common:
+      - name: "azure-vm"
+        source: "git::https://github.com/ITL.Terraform.Modules/terraform-modules.git//azure-vm"
+      - name: "azure-storage"
+        source: "git::https://github.com/ITL.Terraform.Modules/terraform-modules.git//azure-storage"
+      - name: "kubernetes-namespace"
+        source: "git::https://github.com/ITL.Terraform.Modules/terraform-modules.git//k8s-namespace"
+
+# Additional configurations for ITL deployment
+monitoring:
+  # Enable Prometheus monitoring
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      labels:
+        app: "terranetes-controller"
+        
+  # Enable Grafana dashboards
+  grafana:
+    enabled: true
+    dashboards:
+      enabled: true
+
+# Backup and disaster recovery
+backup:
+  enabled: true
+  # Backup terraform state every 6 hours
+  schedule: "0 */6 * * *"
+  retention: "30d"
+
+# Security scanning and compliance
+security:
+  # Enable network policies
+  networkPolicies:
+    enabled: true
+    
+  # Pod security standards
+  podSecurity:
+    enabled: true
+    standard: "restricted"
+    
+  # Image scanning
+  imageScanning:
+    enabled: true
+    
+# Integration with ITL services
+integrations:
+  # ArgoCD for GitOps
+  argocd:
+    enabled: true
+    namespace: "argocd"
+    
+  # Grafana for monitoring
+  grafana:
+    enabled: false
+    namespace: "monitoring"
+    
+  # Prometheus for metrics
+  prometheus:
+    enabled: false
+    namespace: "monitoring"
+    
+  # Keycloak for authentication
+  keycloak:
+    enabled: false
+    namespace: "keycloak"

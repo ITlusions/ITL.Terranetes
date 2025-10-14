@@ -1,0 +1,125 @@
+{{- if .Values.security.networkPolicies.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-controller
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    {{- include "itl-terranetes.itlLabels" . | nindent 4 }}
+  annotations:
+    {{- include "itl-terranetes.itlAnnotations" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: terranetes-controller
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow webhook traffic from Kubernetes API server
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 9443
+  # Allow metrics scraping from monitoring namespace
+  {{- if .Values.monitoring.prometheus.enabled }}
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: {{ .Values.integrations.prometheus.namespace | default "monitoring" }}
+    ports:
+    - protocol: TCP
+      port: 9090
+  {{- end }}
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow Kubernetes API access
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow cloud provider API access (HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow Git repository access (SSH and HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 22
+    - protocol: TCP
+      port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-executor
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    {{- include "itl-terranetes.itlLabels" . | nindent 4 }}
+    component: executor
+  annotations:
+    {{- include "itl-terranetes.itlAnnotations" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: executor
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress: []  # Executors don't need incoming connections
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow Kubernetes API access
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow cloud provider API access (HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow Git repository access (SSH and HTTPS)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 22
+    - protocol: TCP
+      port: 443
+  # Allow Terraform registry access
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow communication back to controller
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: terranetes-controller
+          app.kubernetes.io/instance: {{ .Release.Name }}
+    ports:
+    - protocol: TCP
+      port: 10080
+{{- end }}

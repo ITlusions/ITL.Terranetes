@@ -1,0 +1,211 @@
+{{/*
+Expand the name of the chart.
+*/}}
+{{- define "itl-terranetes.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
+*/}}
+{{- define "itl-terranetes.fullname" -}}
+{{- if .Values.fullnameOverride }}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- $name := default .Chart.Name .Values.nameOverride }}
+{{- if contains $name .Release.Name }}
+{{- .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "itl-terranetes.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Common labels
+*/}}
+{{- define "itl-terranetes.labels" -}}
+helm.sh/chart: {{ include "itl-terranetes.chart" . }}
+{{ include "itl-terranetes.selectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/part-of: itl-infrastructure
+{{- end }}
+
+{{/*
+Selector labels
+*/}}
+{{- define "itl-terranetes.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "itl-terranetes.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Create the name of the service account to use
+*/}}
+{{- define "itl-terranetes.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "itl-terranetes.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
+ITL specific labels
+*/}}
+{{- define "itl-terranetes.itlLabels" -}}
+itl.academy/organization: {{ .Values.itl.organization.name | default "ITL Academy" | quote }}
+itl.academy/environment: {{ .Values.itl.environment.name | default "production" | quote }}
+itl.academy/region: {{ .Values.itl.environment.region | default "westeurope" | quote }}
+itl.academy/managed-by: "terranetes"
+{{- end }}
+
+{{/*
+ITL specific annotations
+*/}}
+{{- define "itl-terranetes.itlAnnotations" -}}
+itl.academy/contact: "devops@itl-academy.com"
+itl.academy/documentation: "https://github.com/ITL-Academy/ITL.Terranetes"
+itl.academy/monitoring: "https://grafana.itl-academy.com"
+{{- end }}
+
+{{/*
+Generate cloud provider credentials secret name
+*/}}
+{{- define "itl-terranetes.azureSecretName" -}}
+{{- if .Values.itl.providers.azure.enabled }}
+{{- .Values.itl.providers.azure.secretName | default "azure-credentials" }}
+{{- end }}
+{{- end }}
+
+{{- define "itl-terranetes.awsSecretName" -}}
+{{- if .Values.itl.providers.aws.enabled }}
+{{- .Values.itl.providers.aws.secretName | default "aws-credentials" }}
+{{- end }}
+{{- end }}
+
+{{- define "itl-terranetes.gcpSecretName" -}}
+{{- if .Values.itl.providers.google.enabled }}
+{{- .Values.itl.providers.google.secretName | default "gcp-credentials" }}
+{{- end }}
+{{- end }}
+
+{{/*
+Generate policy configuration
+*/}}
+{{- define "itl-terranetes.policyConfig" -}}
+{{- if .Values.itl.policies.security.enabled }}
+checkov:
+  enabled: true
+  required_checks:
+    {{- range .Values.itl.policies.security.requiredChecks }}
+    - {{ . | quote }}
+    {{- end }}
+{{- end }}
+{{- if .Values.itl.policies.cost.enabled }}
+cost:
+  enabled: true
+  max_monthly_cost: {{ .Values.itl.policies.cost.maxMonthlyCost | default 1000 }}
+{{- end }}
+{{- if .Values.itl.policies.compliance.enabled }}
+compliance:
+  enabled: true
+  standards:
+    {{- range .Values.itl.policies.compliance.standards }}
+    - {{ . | quote }}
+    {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Generate module registry configuration
+*/}}
+{{- define "itl-terranetes.moduleRegistry" -}}
+{{- if .Values.itl.modules.registry.enabled }}
+registry:
+  url: {{ .Values.itl.modules.registry.url | quote }}
+  type: "git"
+modules:
+  {{- range .Values.itl.modules.common }}
+  - name: {{ .name | quote }}
+    source: {{ .source | quote }}
+  {{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Generate context configuration
+*/}}
+{{- define "itl-terranetes.contexts" -}}
+{{- if .Values.itl.contexts.development.enabled }}
+development:
+  {{- toYaml .Values.itl.contexts.development.values | nindent 2 }}
+{{- end }}
+{{- if .Values.itl.contexts.production.enabled }}
+production:
+  {{- toYaml .Values.itl.contexts.production.values | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{/*
+Generate integration configuration
+*/}}
+{{- define "itl-terranetes.integrations" -}}
+{{- if .Values.integrations.argocd.enabled }}
+argocd:
+  enabled: true
+  namespace: {{ .Values.integrations.argocd.namespace | quote }}
+{{- end }}
+{{- if .Values.integrations.grafana.enabled }}
+grafana:
+  enabled: true
+  namespace: {{ .Values.integrations.grafana.namespace | quote }}
+{{- end }}
+{{- if .Values.integrations.prometheus.enabled }}
+prometheus:
+  enabled: true
+  namespace: {{ .Values.integrations.prometheus.namespace | quote }}
+{{- end }}
+{{- if .Values.integrations.keycloak.enabled }}
+keycloak:
+  enabled: true
+  namespace: {{ .Values.integrations.keycloak.namespace | quote }}
+{{- end }}
+{{- end }}
+
+{{/*
+Generate executor secrets list
+*/}}
+{{- define "itl-terranetes.executorSecrets" -}}
+{{- $secrets := list }}
+{{- if .Values.itl.providers.azure.enabled }}
+{{- $secrets = append $secrets (include "itl-terranetes.azureSecretName" .) }}
+{{- end }}
+{{- if .Values.itl.providers.aws.enabled }}
+{{- $secrets = append $secrets (include "itl-terranetes.awsSecretName" .) }}
+{{- end }}
+{{- if .Values.itl.providers.google.enabled }}
+{{- $secrets = append $secrets (include "itl-terranetes.gcpSecretName" .) }}
+{{- end }}
+{{- if .Values.itl.keycloak.enabled }}
+{{- if .Values.itl.keycloak.clientManagement.enabled }}
+{{- $secrets = append $secrets .Values.itl.keycloak.clientManagement.secretName }}
+{{- end }}
+{{- end }}
+{{- range .Values.terranetes-controller.controller.executorSecrets }}
+{{- $secrets = append $secrets . }}
+{{- end }}
+{{- toYaml $secrets }}
+{{- end }}

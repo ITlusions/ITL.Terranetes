@@ -1,0 +1,245 @@
+name: Security Monitoring
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'chart/**'
+      - '**/Chart.yaml'
+      - '**/values.yaml'
+
+jobs:
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      security-events: write
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Run Trivy vulnerability scanner in repo mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+          
+      - name: Generate security report
+        run: |
+          echo "## Terranetes Chart Security Scan Summary" > security-report.md
+          echo "**Scan Date:** $(date)" >> security-report.md
+          echo "" >> security-report.md
+          
+          # Get vulnerability counts
+          CRITICAL=$(trivy fs --format json --severity CRITICAL . | jq '.Results[]?.Vulnerabilities | length' | awk '{sum += $1} END {print sum+0}')
+          HIGH=$(trivy fs --format json --severity HIGH . | jq '.Results[]?.Vulnerabilities | length' | awk '{sum += $1} END {print sum+0}')
+          MEDIUM=$(trivy fs --format json --severity MEDIUM . | jq '.Results[]?.Vulnerabilities | length' | awk '{sum += $1} END {print sum+0}')
+          
+          echo "**Vulnerability Summary:**" >> security-report.md
+          echo "- Critical: $CRITICAL" >> security-report.md
+          echo "- High: $HIGH" >> security-report.md
+          echo "- Medium: $MEDIUM" >> security-report.md
+          
+          # Output for workflow summary
+          echo "### Terranetes Chart Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Critical:** $CRITICAL" >> $GITHUB_STEP_SUMMARY
+          echo "- **High:** $HIGH" >> $GITHUB_STEP_SUMMARY
+          echo "- **Medium:** $MEDIUM" >> $GITHUB_STEP_SUMMARY
+          
+      - name: Check for high-severity vulnerabilities
+        run: |
+          HIGH_COUNT=$(trivy fs --format json --severity CRITICAL,HIGH . | jq '.Results[]?.Vulnerabilities | length' | awk '{sum += $1} END {print sum+0}')
+          if [ "$HIGH_COUNT" -gt 0 ]; then
+            echo "::warning::Found $HIGH_COUNT high-severity vulnerabilities in Terranetes chart"
+            # Don't fail the build, just warn
+          fi
+
+  terranetes-image-scan:
+    name: Terranetes Controller Image Security
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Get Terranetes Controller version
+        id: get-version
+        run: |
+          # Extract Terranetes controller version from Chart.yaml
+          CONTROLLER_VERSION=$(grep -A5 'name: terranetes-controller' chart/Chart.yaml | grep 'version:' | awk '{print $2}' | tr -d '"')
+          echo "controller-version=$CONTROLLER_VERSION" >> $GITHUB_OUTPUT
+          echo "Found Terranetes Controller version: $CONTROLLER_VERSION"
+          
+      - name: Scan Terranetes Controller image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ghcr.io/appvia/terranetes-controller:v${{ steps.get-version.outputs.controller-version }}'
+          format: 'sarif'
+          output: 'trivy-controller-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          
+      - name: Scan Terranetes Executor image  
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'ghcr.io/appvia/terranetes-executor:v${{ steps.get-version.outputs.controller-version }}'
+          format: 'sarif'
+          output: 'trivy-executor-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          
+      - name: Upload Controller scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-controller-results.sarif'
+          category: 'terranetes-controller'
+          
+      - name: Upload Executor scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-executor-results.sarif'
+          category: 'terranetes-executor'
+          
+      - name: Generate image security report
+        run: |
+          echo "### Terranetes Images Security Scan" >> $GITHUB_STEP_SUMMARY
+          echo "**Controller Version:** v${{ steps.get-version.outputs.controller-version }}" >> $GITHUB_STEP_SUMMARY
+          
+          # Controller vulnerabilities
+          CONTROLLER_CRITICAL=$(trivy image --format json --severity CRITICAL ghcr.io/appvia/terranetes-controller:v${{ steps.get-version.outputs.controller-version }} | jq '.Results[]?.Vulnerabilities | length' | awk '{sum += $1} END {print sum+0}')
+          CONTROLLER_HIGH=$(trivy image --format json --severity HIGH ghcr.io/appvia/terranetes-controller:v${{ steps.get-version.outputs.controller-version }} | jq '.Results[]?.Vulnerabilities | length' | awk '{sum += $1} END {print sum+0}')
+          
+          # Executor vulnerabilities
+          EXECUTOR_CRITICAL=$(trivy image --format json --severity CRITICAL ghcr.io/appvia/terranetes-executor:v${{ steps.get-version.outputs.controller-version }} | jq '.Results[]?.Vulnerabilities | length' | awk '{sum += $1} END {print sum+0}')
+          EXECUTOR_HIGH=$(trivy image --format json --severity HIGH ghcr.io/appvia/terranetes-executor:v${{ steps.get-version.outputs.controller-version }} | jq '.Results[]?.Vulnerabilities | length' | awk '{sum += $1} END {print sum+0}')
+          
+          echo "**Controller Image:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Critical: $CONTROLLER_CRITICAL, High: $CONTROLLER_HIGH" >> $GITHUB_STEP_SUMMARY
+          echo "**Executor Image:**" >> $GITHUB_STEP_SUMMARY
+          echo "- Critical: $EXECUTOR_CRITICAL, High: $EXECUTOR_HIGH" >> $GITHUB_STEP_SUMMARY
+
+  helm-security:
+    name: Helm Chart Security
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.14.0'
+          
+      - name: Add Helm repos
+        run: |
+          helm repo add appvia https://terranetes-controller.appvia.io
+          helm repo update
+          
+      - name: Check for chart vulnerabilities
+        run: |
+          cd chart
+          helm dependency update
+          
+          echo "### Terranetes Helm Chart Security" >> $GITHUB_STEP_SUMMARY
+          echo "**Chart Dependencies:**" >> $GITHUB_STEP_SUMMARY
+          helm dependency list | tail -n +2 | while read name version repository status; do
+            echo "- **$name:** $version ($status)" >> $GITHUB_STEP_SUMMARY
+          done
+          
+      - name: Validate chart templates
+        run: |
+          cd chart
+          echo "**Template Validation:**" >> $GITHUB_STEP_SUMMARY
+          
+          # Test template rendering with various configurations
+          helm template itl-terranetes . \
+            --set itl.enabled=true \
+            --set terranetes-controller.enabled=true \
+            --validate > /dev/null && echo "- ✅ Default configuration valid" >> $GITHUB_STEP_SUMMARY || echo "- ❌ Default configuration invalid" >> $GITHUB_STEP_SUMMARY
+          
+          helm template itl-terranetes . \
+            --set itl.enabled=false \
+            --set terranetes-controller.enabled=true \
+            --validate > /dev/null && echo "- ✅ Minimal configuration valid" >> $GITHUB_STEP_SUMMARY || echo "- ❌ Minimal configuration invalid" >> $GITHUB_STEP_SUMMARY
+          
+      - name: Check for security policies
+        run: |
+          echo "**Security Policy Check:**" >> $GITHUB_STEP_SUMMARY
+          
+          # Check if NetworkPolicy is included
+          if grep -r "kind: NetworkPolicy" chart/templates/ > /dev/null; then
+            echo "- ✅ NetworkPolicy template found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⚠️ No NetworkPolicy template found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check for SecurityContext settings
+          if grep -r "securityContext" chart/ > /dev/null; then
+            echo "- ✅ SecurityContext configurations found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⚠️ No SecurityContext configurations found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check for resource limits
+          if grep -r "resources:" chart/ > /dev/null; then
+            echo "- ✅ Resource limits defined" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ⚠️ No resource limits defined" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  policy-validation:
+    name: Terranetes Policy Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+          
+      - name: Validate CRD schemas
+        run: |
+          echo "### Terranetes CRD Validation" >> $GITHUB_STEP_SUMMARY
+          
+          # Check if templates contain proper CRD references
+          if find chart/templates -name "*.yaml" -exec grep -l "apiVersion: terranet.appvia.io" {} \; | head -1; then
+            echo "- ✅ Terranetes CRD references found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ℹ️ No custom Terranetes CRD templates (uses upstream CRDs)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Validate common Terranetes resource patterns
+          echo "**Resource Pattern Validation:**" >> $GITHUB_STEP_SUMMARY
+          
+          # Check for Configuration templates
+          if find chart/templates -name "*.yaml" -exec grep -l "kind: Configuration" {} \; | head -1; then
+            echo "- ✅ Configuration templates found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ℹ️ No Configuration templates (managed separately)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check for Provider templates  
+          if find chart/templates -name "*.yaml" -exec grep -l "kind: Provider" {} \; | head -1; then
+            echo "- ✅ Provider templates found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- ℹ️ No Provider templates (managed separately)" >> $GITHUB_STEP_SUMMARY
+          fi

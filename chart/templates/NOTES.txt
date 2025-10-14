@@ -1,0 +1,141 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "itl-terranetes.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+           You can watch the status of by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "itl-terranetes.fullname" . }}'
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "itl-terranetes.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- else if contains "ClusterIP" .Values.service.type }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "itl-terranetes.name" . }},app.kubernetes.io/instance={{ .Release.Name }}" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+{{- end }}
+
+2. ITL Terranetes Controller has been successfully deployed!
+
+   🏫 Organization: {{ .Values.itl.organization.name | default "ITL Academy" }}
+   🌍 Environment: {{ .Values.itl.environment.name | default "production" }}
+   📍 Region: {{ .Values.itl.environment.region | default "westeurope" }}
+   🔧 Namespace: {{ .Values.global.namespace | default "terraform-system" }}
+
+3. Verify the installation:
+
+   # Check controller status
+   kubectl get pods -n {{ .Values.global.namespace | default "terraform-system" }} -l app.kubernetes.io/name=terranetes-controller
+
+   # Check available CRDs
+   kubectl get crd | grep terraform.appvia.io
+
+   # View controller logs
+   kubectl logs -n {{ .Values.global.namespace | default "terraform-system" }} deployment/terranetes-controller
+
+4. Cloud Provider Setup:
+
+{{- if .Values.itl.providers.azure.enabled }}
+   🔵 Azure is enabled. Ensure you have created the azure-credentials secret:
+   
+   kubectl create secret generic {{ .Values.itl.providers.azure.secretName | default "azure-credentials" }} \
+     --from-literal=ARM_CLIENT_ID="<client-id>" \
+     --from-literal=ARM_CLIENT_SECRET="<client-secret>" \
+     --from-literal=ARM_SUBSCRIPTION_ID="<subscription-id>" \
+     --from-literal=ARM_TENANT_ID="<tenant-id>" \
+     -n {{ .Values.global.namespace | default "terraform-system" }}
+{{- end }}
+
+{{- if .Values.itl.providers.aws.enabled }}
+   🟠 AWS is enabled. Ensure you have created the aws-credentials secret:
+   
+   kubectl create secret generic {{ .Values.itl.providers.aws.secretName | default "aws-credentials" }} \
+     --from-literal=AWS_ACCESS_KEY_ID="<access-key>" \
+     --from-literal=AWS_SECRET_ACCESS_KEY="<secret-key>" \
+     --from-literal=AWS_DEFAULT_REGION="eu-west-1" \
+     -n {{ .Values.global.namespace | default "terraform-system" }}
+{{- end }}
+
+{{- if .Values.itl.providers.google.enabled }}
+   🔴 Google Cloud is enabled. Ensure you have created the gcp-credentials secret:
+   
+   kubectl create secret generic {{ .Values.itl.providers.google.secretName | default "gcp-credentials" }} \
+     --from-literal=GOOGLE_CREDENTIALS="<service-account-json>" \
+     -n {{ .Values.global.namespace | default "terraform-system" }}
+{{- end }}
+
+5. Quick Start - Create your first configuration:
+
+   cat <<EOF | kubectl apply -f -
+   apiVersion: terraform.appvia.io/v1alpha1
+   kind: Configuration
+   metadata:
+     name: itl-example
+     namespace: {{ .Values.global.namespace | default "terraform-system" }}
+   spec:
+     module: git::https://github.com/ITL-Academy/terraform-modules.git//example
+     variables:
+       environment: "{{ .Values.itl.environment.name | default "production" }}"
+       organization: "{{ .Values.itl.organization.name | default "ITL Academy" }}"
+   EOF
+
+6. Monitoring and Observability:
+
+{{- if .Values.monitoring.prometheus.enabled }}
+   📊 Prometheus metrics are available at: /metrics
+   🔍 ServiceMonitor has been created for automatic scraping
+{{- end }}
+
+{{- if .Values.monitoring.grafana.enabled }}
+   📈 Grafana dashboard has been deployed to monitor Terranetes
+   🎯 Dashboard: "ITL Terranetes Controller - Overview"
+{{- end }}
+
+7. ITL-Specific Features:
+
+   ✅ Security policies: {{ if .Values.itl.policies.security.enabled }}Enabled{{ else }}Disabled{{ end }}
+   💰 Cost management: {{ if .Values.itl.policies.cost.enabled }}Enabled (Max: ${{ .Values.itl.policies.cost.maxMonthlyCost | default "1000" }}/month){{ else }}Disabled{{ end }}
+   📋 Compliance standards: {{ if .Values.itl.policies.compliance.enabled }}{{ join ", " .Values.itl.policies.compliance.standards }}{{ else }}None{{ end }}
+   🔗 Keycloak integration: {{ if .Values.itl.keycloak.enabled }}Enabled{{ else }}Disabled{{ end }}
+
+8. Integration Status:
+
+{{- if .Values.integrations.argocd.enabled }}
+   🔄 ArgoCD: Ready for GitOps workflows ({{ .Values.integrations.argocd.namespace }})
+{{- end }}
+{{- if .Values.integrations.grafana.enabled }}
+   📊 Grafana: Dashboard deployed ({{ .Values.integrations.grafana.namespace }})
+{{- end }}
+{{- if .Values.integrations.prometheus.enabled }}
+   📈 Prometheus: Metrics collection enabled ({{ .Values.integrations.prometheus.namespace }})
+{{- end }}
+{{- if .Values.integrations.keycloak.enabled }}
+   🔐 Keycloak: Authentication ready ({{ .Values.integrations.keycloak.namespace }})
+{{- end }}
+
+9. Backup and Disaster Recovery:
+
+{{- if .Values.backup.enabled }}
+   💾 Automated backups: {{ .Values.backup.schedule }}
+   🗄️ Retention policy: {{ .Values.backup.retention | default "30d" }}
+   📋 Backup includes: configurations, runs, plans, policies, providers, contexts
+{{- else }}
+   ⚠️  Backup is disabled. Consider enabling for production use.
+{{- end }}
+
+10. Documentation and Support:
+
+    📚 Documentation: https://github.com/ITL-Academy/ITL.Terranetes
+    🌐 Official Docs: https://terranetes.appvia.io/
+    💬 ITL DevOps: devops@itl-academy.com
+    📊 Monitoring: https://grafana.itl-academy.com
+
+For advanced configuration and troubleshooting, please refer to the README.md file.
+
+Happy Infrastructure-as-Code with ITL Terranetes! 🚀

@@ -1,0 +1,92 @@
+{{- if .Values.itl.enabled -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-config
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    {{- include "itl-terranetes.itlLabels" . | nindent 4 }}
+  annotations:
+    {{- include "itl-terranetes.itlAnnotations" . | nindent 4 }}
+data:
+  # ITL-specific configuration
+  itl-config.yaml: |
+    organization:
+      name: {{ .Values.itl.organization.name | quote }}
+      domain: {{ .Values.itl.organization.domain | quote }}
+    
+    environment:
+      name: {{ .Values.itl.environment.name | quote }}
+      region: {{ .Values.itl.environment.region | quote }}
+    
+    {{- if .Values.itl.policies }}
+    policies:
+      {{- include "itl-terranetes.policyConfig" . | nindent 6 }}
+    {{- end }}
+    
+    {{- if .Values.itl.modules.registry.enabled }}
+    modules:
+      {{- include "itl-terranetes.moduleRegistry" . | nindent 6 }}
+    {{- end }}
+    
+    {{- if or .Values.itl.contexts.development.enabled .Values.itl.contexts.production.enabled }}
+    contexts:
+      {{- include "itl-terranetes.contexts" . | nindent 6 }}
+    {{- end }}
+    
+    {{- if or .Values.integrations.argocd.enabled .Values.integrations.grafana.enabled .Values.integrations.prometheus.enabled .Values.integrations.keycloak.enabled }}
+    integrations:
+      {{- include "itl-terranetes.integrations" . | nindent 6 }}
+    {{- end }}
+
+  # Common Terraform module configurations
+  common-modules.yaml: |
+    modules:
+      {{- range .Values.itl.modules.common }}
+      - name: {{ .name | quote }}
+        source: {{ .source | quote }}
+        description: "ITL common module for {{ .name }}"
+        version: "latest"
+      {{- end }}
+
+  # Policy enforcement configuration
+  {{- if .Values.itl.policies.security.enabled }}
+  security-policies.yaml: |
+    security:
+      required_checks:
+        {{- range .Values.itl.policies.security.requiredChecks }}
+        - check_id: {{ . | quote }}
+          severity: "HIGH"
+          enforcement: "blocking"
+        {{- end }}
+      
+      compliance_standards:
+        {{- if .Values.itl.policies.compliance.enabled }}
+        {{- range .Values.itl.policies.compliance.standards }}
+        - {{ . | quote }}
+        {{- end }}
+        {{- end }}
+  {{- end }}
+
+  # Cost management configuration
+  {{- if .Values.itl.policies.cost.enabled }}
+  cost-policies.yaml: |
+    cost:
+      enabled: true
+      max_monthly_cost: {{ .Values.itl.policies.cost.maxMonthlyCost }}
+      currency: "USD"
+      alerts:
+        - threshold: 0.8
+          action: "warn"
+        - threshold: 0.95
+          action: "block"
+      
+      budgets:
+        development:
+          monthly_limit: {{ div .Values.itl.policies.cost.maxMonthlyCost 4 }}
+        production:
+          monthly_limit: {{ div (mul .Values.itl.policies.cost.maxMonthlyCost 3) 4 }}
+  {{- end }}
+
+{{- end }}

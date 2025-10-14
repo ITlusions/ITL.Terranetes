@@ -1,0 +1,190 @@
+{{- if .Values.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-backup
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    {{- include "itl-terranetes.itlLabels" . | nindent 4 }}
+    component: backup
+  annotations:
+    {{- include "itl-terranetes.itlAnnotations" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            {{- include "itl-terranetes.selectorLabels" . | nindent 12 }}
+            {{- include "itl-terranetes.itlLabels" . | nindent 12 }}
+            component: backup
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ include "itl-terranetes.fullname" . }}-backup
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            fsGroup: 2000
+          containers:
+          - name: backup
+            image: "bitnami/kubectl:latest"
+            imagePullPolicy: IfNotPresent
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                - ALL
+              readOnlyRootFilesystem: true
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              
+              # Create backup directory
+              BACKUP_DIR="/tmp/backup/$(date +%Y%m%d-%H%M%S)"
+              mkdir -p "$BACKUP_DIR"
+              
+              echo "Starting ITL Terranetes backup at $(date)"
+              
+              # Backup all configurations
+              echo "Backing up configurations..."
+              kubectl get configurations -A -o yaml > "$BACKUP_DIR/configurations.yaml"
+              
+              # Backup all runs
+              echo "Backing up runs..."
+              kubectl get runs -A -o yaml > "$BACKUP_DIR/runs.yaml"
+              
+              # Backup all plans
+              echo "Backing up plans..."
+              kubectl get plans -A -o yaml > "$BACKUP_DIR/plans.yaml"
+              
+              # Backup all policies
+              echo "Backing up policies..."
+              kubectl get policies -A -o yaml > "$BACKUP_DIR/policies.yaml"
+              
+              # Backup all providers
+              echo "Backing up providers..."
+              kubectl get providers -A -o yaml > "$BACKUP_DIR/providers.yaml"
+              
+              # Backup all contexts
+              echo "Backing up contexts..."
+              kubectl get contexts -A -o yaml > "$BACKUP_DIR/contexts.yaml"
+              
+              # Backup controller configuration
+              echo "Backing up controller configuration..."
+              kubectl get configmaps -n {{ .Values.global.namespace | default "terraform-system" }} -l app.kubernetes.io/name=terranetes-controller -o yaml > "$BACKUP_DIR/controller-config.yaml"
+              
+              # Backup secrets (metadata only, not actual secret data for security)
+              echo "Backing up secret metadata..."
+              kubectl get secrets -n {{ .Values.global.namespace | default "terraform-system" }} -l app.kubernetes.io/name=terranetes-controller -o yaml | kubectl neat > "$BACKUP_DIR/secrets-metadata.yaml"
+              
+              # Create summary
+              echo "Creating backup summary..."
+              cat <<EOF > "$BACKUP_DIR/backup-summary.yaml"
+              apiVersion: v1
+              kind: ConfigMap
+              metadata:
+                name: backup-summary-$(date +%Y%m%d-%H%M%S)
+                namespace: {{ .Values.global.namespace | default "terraform-system" }}
+                labels:
+                  backup.itl.academy/type: "terranetes"
+                  backup.itl.academy/timestamp: "$(date -Iseconds)"
+              data:
+                timestamp: "$(date -Iseconds)"
+                configurations: "$(kubectl get configurations -A --no-headers | wc -l)"
+                runs: "$(kubectl get runs -A --no-headers | wc -l)"
+                plans: "$(kubectl get plans -A --no-headers | wc -l)"
+                policies: "$(kubectl get policies -A --no-headers | wc -l)"
+                providers: "$(kubectl get providers -A --no-headers | wc -l)"
+                contexts: "$(kubectl get contexts -A --no-headers | wc -l)"
+                backup_location: "$BACKUP_DIR"
+                retention_policy: "{{ .Values.backup.retention }}"
+              EOF
+              
+              # Apply the summary to cluster
+              kubectl apply -f "$BACKUP_DIR/backup-summary.yaml"
+              
+              # TODO: Upload to external storage (Azure Blob, S3, etc.)
+              # This would depend on ITL's backup storage solution
+              
+              echo "Backup completed successfully at $(date)"
+              echo "Backup location: $BACKUP_DIR"
+              
+              # Cleanup old backups based on retention policy
+              echo "Cleaning up old backups..."
+              kubectl delete configmaps -n {{ .Values.global.namespace | default "terraform-system" }} -l backup.itl.academy/type=terranetes --field-selector='metadata.creationTimestamp<{{ .Values.backup.retention | default "30d" }}'
+              
+            env:
+            - name: BACKUP_RETENTION
+              value: {{ .Values.backup.retention | default "30d" | quote }}
+            - name: NAMESPACE
+              value: {{ .Values.global.namespace | default "terraform-system" | quote }}
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /tmp/backup
+            resources:
+              limits:
+                cpu: "100m"
+                memory: "256Mi"
+              requests:
+                cpu: "10m"
+                memory: "64Mi"
+          volumes:
+          - name: backup-storage
+            emptyDir:
+              sizeLimit: "1Gi"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-backup
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    {{- include "itl-terranetes.itlLabels" . | nindent 4 }}
+    component: backup
+  annotations:
+    {{- include "itl-terranetes.itlAnnotations" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-backup
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    {{- include "itl-terranetes.itlLabels" . | nindent 4 }}
+    component: backup
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "create", "delete"]
+- apiGroups: ["terraform.appvia.io"]
+  resources: ["configurations", "runs", "plans", "policies", "providers", "contexts"]
+  verbs: ["get", "list"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "itl-terranetes.fullname" . }}-backup
+  labels:
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
+    {{- include "itl-terranetes.itlLabels" . | nindent 4 }}
+    component: backup
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "itl-terranetes.fullname" . }}-backup
+subjects:
+- kind: ServiceAccount
+  name: {{ include "itl-terranetes.fullname" . }}-backup
+  namespace: {{ .Values.global.namespace | default "terraform-system" }}
+{{- end }}

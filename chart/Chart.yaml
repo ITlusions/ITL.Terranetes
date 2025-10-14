@@ -1,0 +1,30 @@
+apiVersion: v2
+name: itl-terranetes-controller
+description: ITL wrapper for Terranetes Controller - Terraform and OpenTofu workflow management for Kubernetes
+type: application
+version: 0.1.0
+appVersion: "v0.9.24"
+
+home: https://terranetes.appvia.io
+sources:
+  - https://github.com/appvia/terranetes-controller
+  - https://github.com/itlusions/ITL.Terranetes
+
+keywords:
+  - terraform
+  - opentofu
+  - kubernetes
+  - infrastructure
+  - gitops
+  - policy
+  - security
+
+maintainers:
+  - name: Niels Weistra
+    email: info@itlusions.com
+
+dependencies:
+  - name: terranetes-controller
+    version: "0.9.24"
+    repository: https://terranetes-controller.appvia.io
+    condition: terranetes-controller.enabled

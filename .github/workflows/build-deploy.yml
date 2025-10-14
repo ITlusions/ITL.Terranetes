@@ -1,0 +1,379 @@
+name: Package and Publish Terranetes Helm Chart
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+  release:
+    types: [published]
+  push:
+    branches: 
+      - main
+      - develop
+      - 'feature/**'
+    paths: 
+      - 'chart/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'chart/**'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # Lint Helm chart
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.12.0'
+
+    - name: Add Helm repositories
+      run: |
+        echo "🔄 Adding Terranetes Helm repository..."
+        helm repo add appvia https://terranetes-controller.appvia.io
+        helm repo update
+
+    - name: Update Helm dependencies
+      run: |
+        echo "🔄 Updating Helm dependencies..."
+        helm dependency update chart/
+
+    - name: Lint Helm chart
+      run: |
+        echo "🔍 Linting Helm chart..."
+        helm lint chart/ --strict
+
+    - name: Validate Helm templates
+      run: |
+        echo "🔍 Validating Helm templates..."
+        helm template itl-terranetes chart \
+          --validate=false > manifests-test.yaml
+
+  # Package Helm chart
+  helm-package:
+    needs: [helm-lint]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.12.0'
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Package Helm chart
+      run: |
+        echo "📦 Packaging Terranetes Helm chart for ref: ${{ github.ref_name }}"
+        
+        # Create helm packages directory
+        mkdir -p helm-packages
+        
+        # Determine version based on event type
+        if [[ "${{ github.event_name }}" == "release" ]] || [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+          # For releases or version tags, use the tag version
+          CHART_VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+          APP_VERSION="${{ github.ref_name }}"
+          echo "📋 Release build - Chart version: $CHART_VERSION, App version: $APP_VERSION"
+        else
+          # For regular builds, use branch name with commit SHA
+          SAFE_REF_NAME=$(echo "${{ github.ref_name }}" | sed 's|/|-|g')
+          CHART_VERSION="0.0.0-${SAFE_REF_NAME}-${{ github.sha }}"
+          APP_VERSION="${{ github.sha }}"
+          echo "🔧 Development build - Chart version: $CHART_VERSION, App version: $APP_VERSION"
+        fi
+        
+        # Update Chart.yaml with the determined version
+        sed -i "s|^version: .*|version: $CHART_VERSION|" chart/Chart.yaml
+        sed -i "s|^appVersion: .*|appVersion: $APP_VERSION|" chart/Chart.yaml
+        
+        # Update dependencies before packaging
+        echo "🔄 Adding Terranetes repository and updating dependencies..."
+        helm repo add appvia https://terranetes-controller.appvia.io
+        helm repo update
+        helm dependency update chart/
+        
+        # Package the chart
+        helm package chart \
+          --version "$CHART_VERSION" \
+          --app-version "$APP_VERSION" \
+          --destination helm-packages/
+        
+        echo "✅ Chart packaged successfully"
+        ls -la helm-packages/
+
+    - name: Push Helm chart to GHCR
+      if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+      run: |
+        echo "🚀 Pushing Terranetes Helm chart to GitHub Container Registry"
+        
+        # Chart version without 'v' prefix
+        CHART_VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+        
+        # Define the OCI repository URL
+        CHART_REPO="${{ env.REGISTRY }}/itlusions/helm/terranetes"
+        
+        echo "Chart repository: $CHART_REPO"
+        echo "Chart version: $CHART_VERSION"
+        
+        # Find the packaged chart file
+        CHART_FILE=$(find helm-packages -name "itl-terranetes-controller-*.tgz" | head -1)
+        if [ -z "$CHART_FILE" ]; then
+          echo "❌ No chart file found in helm-packages/"
+          ls -la helm-packages/
+          exit 1
+        fi
+        
+        echo "Chart file: $CHART_FILE"
+        
+        # Push the chart
+        helm push "$CHART_FILE" "oci://${{ env.REGISTRY }}/itlusions/helm"
+        
+        echo "✅ Terranetes Helm chart pushed successfully to $CHART_REPO:$CHART_VERSION"
+
+    - name: Upload Helm package artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: helm-chart-package
+        path: helm-packages/*.tgz
+        if-no-files-found: error
+        retention-days: 30
+        overwrite: true
+
+  # Deploy only for version tags
+  deploy:
+    needs: [helm-package]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/v')
+    environment: production
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: '3.12.0'
+
+    - name: Create release artifacts
+      run: |
+        # Create release package directory
+        mkdir -p release-artifacts
+        
+        # Package Helm chart for release (local copy)
+        CHART_VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+        
+        # Update dependencies before packaging
+        echo "🔄 Updating Helm dependencies for release artifacts..."
+        helm repo add appvia https://terranetes-controller.appvia.io
+        helm repo update
+        helm dependency update chart/
+        
+        helm package chart \
+          --version "$CHART_VERSION" \
+          --app-version "${{ github.ref_name }}" \
+          --destination release-artifacts/
+        
+        echo "📦 Release artifacts created:"
+        ls -la release-artifacts/
+
+    - name: Upload Artifacts to Existing Release
+      run: |
+        # Upload artifacts to the existing release
+        echo "Uploading artifacts to existing release ${{ github.ref_name }}..."
+        
+        # Check if release exists
+        if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+          echo "✅ Release ${{ github.ref_name }} exists"
+          
+          # Upload all artifacts to the existing release
+          for file in release-artifacts/*; do
+            echo "📦 Uploading: $(basename "$file")"
+            gh release upload "${{ github.ref_name }}" "$file" --clobber
+          done
+          
+          echo "✅ All artifacts uploaded successfully"
+        else
+          echo "❌ Release ${{ github.ref_name }} does not exist"
+          echo "Please create the release manually first, then re-run the workflow"
+          exit 1
+        fi
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-teams:
+    needs: [deploy]
+    runs-on: ubuntu-latest
+    if: always() && needs.deploy.result != 'cancelled'
+    steps:
+    - name: Notify Microsoft Teams
+      shell: bash
+      run: |
+        # Check if Teams webhook is configured
+        if [ -z "${{ secrets.TEAMS_WEBHOOK }}" ]; then
+          echo "🔕 Teams webhook not configured, skipping notification"
+          exit 0
+        fi
+        
+        echo "📧 Preparing Teams notification..."
+        echo "Status: ${{ needs.deploy.result }}"
+        echo "Actor: ${{ github.actor }}"
+        echo "Ref: ${{ github.ref_name }}"
+        echo "Event: ${{ github.event_name }}"
+        
+        # Determine trigger source
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          TRIGGER="Manual (by ${{ github.actor }})"
+          if [ "${{ inputs.environment }}" != "" ]; then
+            TRIGGER="$TRIGGER → ${{ inputs.environment }}"
+          fi
+        else
+          TRIGGER="Automatic (${{ github.event_name }})"
+        fi
+        echo "Trigger: $TRIGGER"
+        
+        # Determine status and color
+        STATUS="${{ needs.deploy.result }}"
+        case "$STATUS" in
+          "success") COLOR="Good"; EMOJI="✅" ;;
+          "failure") COLOR="Attention"; EMOJI="❌" ;;
+          "cancelled") COLOR="Warning"; EMOJI="⚠️" ;;
+          *) COLOR="Warning"; EMOJI="⚠️" ;;
+        esac
+        
+        # Truncate commit SHA for display
+        SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-8)
+        
+        # Create Teams payload
+        CHART_VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+        cat > teams_payload.json << EOF
+        {
+          "@type": "MessageCard",
+          "@context": "http://schema.org/extensions",
+          "summary": "ITL Terranetes Controller Helm Chart Deployment",
+          "themeColor": "$COLOR",
+          "sections": [
+            {
+              "activityTitle": "ITL Terranetes Controller",
+              "activitySubtitle": "Helm Chart Published",
+              "activityImage": "https://github.com/ITlusions.png",
+              "facts": [
+                {
+                  "name": "Status:",
+                  "value": "$STATUS $EMOJI"
+                },
+                {
+                  "name": "Version:",
+                  "value": "${{ github.ref_name }}"
+                },
+                {
+                  "name": "Commit:",
+                  "value": "$SHORT_SHA"
+                },
+                {
+                  "name": "Trigger:",
+                  "value": "$TRIGGER"
+                },
+                {
+                  "name": "Actor:",
+                  "value": "${{ github.actor }}"
+                },
+                {
+                  "name": "Helm Chart:",
+                  "value": "v$CHART_VERSION available in GHCR"
+                },
+                {
+                  "name": "Registry:",
+                  "value": "oci://ghcr.io/itlusions/helm/terranetes"
+                },
+                {
+                  "name": "Component:",
+                  "value": "Terranetes Controller for Infrastructure as Code"
+                }
+              ],
+              "markdown": true
+            }
+          ],
+          "potentialAction": [
+            {
+              "@type": "OpenUri",
+              "name": "View Workflow",
+              "targets": [
+                {
+                  "os": "default",
+                  "uri": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                }
+              ]
+            },
+            {
+              "@type": "OpenUri",
+              "name": "View Chart Package",
+              "targets": [
+                {
+                  "os": "default",
+                  "uri": "https://github.com/ITlusions/ITL.Terranetes/pkgs/container/helm%2Fterranetes"
+                }
+              ]
+            },
+            {
+              "@type": "OpenUri",
+              "name": "Terranetes Documentation",
+              "targets": [
+                {
+                  "os": "default",
+                  "uri": "https://terranetes.appvia.io/"
+                }
+              ]
+            }
+          ]
+        }
+        EOF
+        
+        echo "📝 Message payload created"
+        
+        # Send to Teams
+        echo "📤 Sending notification to Teams..."
+        RESPONSE=$(curl -s -w "\n%{http_code}" -H "Content-Type: application/json" \
+             -d @teams_payload.json \
+             "${{ secrets.TEAMS_WEBHOOK }}")
+        
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+        
+        echo "📊 HTTP Response Code: $HTTP_CODE"
+        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "202" ]; then
+          echo "✅ Teams notification sent successfully!"
+        else
+          echo "❌ Teams notification failed!"
+          echo "Response: $RESPONSE"
+        fi
+      env:
+        TEAMS_WEBHOOK: ${{ secrets.TEAMS_WEBHOOK }}

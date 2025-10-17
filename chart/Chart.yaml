@@ -3,7 +3,7 @@ name: itl-terranetes-controller
 description: ITL wrapper for Terranetes Controller - Terraform and OpenTofu workflow management for Kubernetes
 type: application
 version: 0.1.0
-appVersion: "v0.9.24"
+appVersion: "v0.8.4"
 
 home: https://terranetes.appvia.io
 sources:
@@ -25,6 +25,6 @@ maintainers:
 
 dependencies:
   - name: terranetes-controller
-    version: "0.9.24"
+    version: "0.8.4"
     repository: https://terranetes-controller.appvia.io
     condition: terranetes-controller.enabled

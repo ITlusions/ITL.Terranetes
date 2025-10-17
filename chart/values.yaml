@@ -480,7 +480,7 @@ itl:
       
     # Cost management policies
     cost:
-      enabled: true
+      enabled: false
       # Maximum monthly cost threshold (in USD)
       maxMonthlyCost: 1000
       

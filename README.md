@@ -67,37 +67,106 @@ Application Namespace Architecture:
 
 ## Installation
 
-### 1. Add the Required Helm Repositories
+### Quick Install
 
 ```bash
-# Add official Terranetes repository
+# Add the ITL Helm repository (OCI registry)
+helm repo add itl-terranetes oci://ghcr.io/itlusions/helm/terranetes
+
+# Install the chart
+helm install terranetes itl-terranetes/itl-terranetes-controller \
+  --create-namespace \
+  --namespace terraform-system \
+  --values values.yaml
+```
+
+### Install from GitHub Container Registry (OCI)
+
+```bash
+# Install directly from GitHub Container Registry
+helm install terranetes oci://ghcr.io/itlusions/helm/terranetes \
+  --version v0.1.0 \
+  --create-namespace \
+  --namespace terraform-system \
+  --values values.yaml
+```
+
+### Install from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/ITlusions/ITL.Terranetes.git
+cd ITL.Terranetes
+
+# Add required dependencies
 helm repo add appvia https://terranetes-controller.appvia.io
 helm repo update
-```
-
-### 2. Install ITL Terranetes Controller
-
-```bash
-# Create the terraform-system namespace
-kubectl create namespace terraform-system
 
 # Install with ITL-specific configuration
-helm install itl-terranetes ./chart -n terraform-system
-
-# Or install from OCI registry (when published)
-helm install itl-terranetes oci://ghcr.io/itlusions/helm/terranetes -n terraform-system
+helm install itl-terranetes ./chart \
+  --create-namespace \
+  --namespace terraform-system \
+  --values values.yaml
 ```
 
-### 3. Verify Installation
+### Basic Values Configuration
+
+Create a `values.yaml` file:
+
+```yaml
+# ITL Terranetes Controller Configuration
+itl:
+  enabled: true
+  organization: "your-org"
+  environment: "production"
+  
+  keycloak:
+    enabled: true
+    realm: "itl-academy"
+    clientId: "terranetes"
+    
+  monitoring:
+    enabled: true
+    namespace: "monitoring"
+    
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    retentionDays: 30
+
+terranetes-controller:
+  enabled: true
+  
+  controller:
+    costs:
+      enabled: true
+      secret: "infracost-api"
+      
+    policy:
+      enabled: true
+      source: "https://github.com/itlusions/terraform-policies"
+      
+  replicaCount: 1
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+```
+
+### Verify Installation
 
 ```bash
-# Check controller deployment
+# Check the deployment
 kubectl get pods -n terraform-system
 
-# Check CRDs
-kubectl get crd | grep terraform.appvia.io
+# Check the CRDs
+kubectl get crd | grep terranetes
 
-# Check controller logs
+# View controller logs
 kubectl logs -n terraform-system deployment/terranetes-controller
 
 # Verify ITL-specific resources

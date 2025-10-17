@@ -1,0 +1,6 @@
+dependencies:
+- name: terranetes-controller
+  repository: https://terranetes-controller.appvia.io
+  version: v0.8.5
+digest: sha256:b9c2f01764473e9850f4feae8efc85f18162ac229c75802b7e0a2852e39ac5d0
+generated: "2025-10-17T22:45:25.8578113+02:00"

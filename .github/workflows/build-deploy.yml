@@ -174,6 +174,7 @@ jobs:
     environment: production
     permissions:
       contents: write
+      packages: write
     
     steps:
     - name: Checkout repository
@@ -183,6 +184,13 @@ jobs:
       uses: azure/setup-helm@v3
       with:
         version: '3.12.0'
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Create release artifacts
       run: |
@@ -205,6 +213,142 @@ jobs:
         
         echo "📦 Release artifacts created:"
         ls -la release-artifacts/
+
+    - name: Push Helm Chart to GHCR
+      run: |
+        echo "🚀 Pushing Terranetes Helm chart to GitHub Container Registry"
+        
+        # Chart version without 'v' prefix
+        CHART_VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+        
+        # Define the OCI repository URL
+        CHART_REPO="${{ env.REGISTRY }}/itlusions/helm/terranetes"
+        
+        echo "Chart repository: $CHART_REPO"
+        echo "Chart version: $CHART_VERSION"
+        
+        # Find the packaged chart file
+        CHART_FILE=$(find release-artifacts -name "itl-terranetes-controller-*.tgz" | head -1)
+        if [ -z "$CHART_FILE" ]; then
+          echo "❌ No chart file found in release-artifacts/"
+          ls -la release-artifacts/
+          exit 1
+        fi
+        
+        echo "Chart file: $CHART_FILE"
+        
+        # Push the chart to GHCR
+        helm push "$CHART_FILE" "oci://${{ env.REGISTRY }}/itlusions/helm"
+        
+        echo "✅ Terranetes Helm chart pushed successfully to $CHART_REPO:$CHART_VERSION"
+
+    - name: Create Helm Install Instructions
+      run: |
+        # Create installation notes
+        CHART_VERSION=$(echo "${{ github.ref_name }}" | sed 's/^v//')
+        
+        cat > release-artifacts/INSTALL.md << 'EOF'
+        # ITL Terranetes Controller - Installation Guide
+        
+        ## Quick Install
+        
+        ```bash
+        # Add the ITL Helm repository
+        helm repo add itl-terranetes oci://ghcr.io/itlusions/helm/terranetes
+        
+        # Install the chart
+        helm install terranetes itl-terranetes/itl-terranetes-controller \
+          --create-namespace \
+          --namespace terraform-system \
+          --values values.yaml
+        ```
+        
+        ## Install from GHCR (OCI Registry)
+        
+        ```bash
+        # Install directly from GitHub Container Registry
+        helm install terranetes oci://ghcr.io/itlusions/helm/terranetes \
+          --version CHART_VERSION_PLACEHOLDER \
+          --create-namespace \
+          --namespace terraform-system \
+          --values values.yaml
+        ```
+        
+        ## Basic Values Configuration
+        
+        Create a `values.yaml` file:
+        
+        ```yaml
+        # ITL Terranetes Controller Configuration
+        itl:
+          enabled: true
+          organization: "your-org"
+          environment: "production"
+          
+          keycloak:
+            enabled: true
+            realm: "itl-academy"
+            clientId: "terranetes"
+            
+          monitoring:
+            enabled: true
+            namespace: "monitoring"
+            
+          backup:
+            enabled: true
+            schedule: "0 2 * * *"
+            retentionDays: 30
+        
+        terranetes-controller:
+          enabled: true
+          
+          controller:
+            costs:
+              enabled: true
+              secret: "infracost-api"
+              
+            policy:
+              enabled: true
+              source: "https://github.com/itlusions/terraform-policies"
+              
+          replicaCount: 1
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+        ```
+        
+        ## Verify Installation
+        
+        ```bash
+        # Check the deployment
+        kubectl get pods -n terraform-system
+        
+        # Check the CRDs
+        kubectl get crd | grep terranetes
+        
+        # View controller logs
+        kubectl logs -n terraform-system deployment/terranetes-controller
+        ```
+        
+        ## Next Steps
+        
+        1. Configure your cloud provider credentials
+        2. Create your first Configuration resource
+        3. Set up monitoring and alerts
+        4. Configure backup strategies
+        
+        For detailed documentation, visit: https://terranetes.appvia.io/
+        EOF
+        
+        # Replace the version placeholder
+        sed -i "s/CHART_VERSION_PLACEHOLDER/$CHART_VERSION/g" release-artifacts/INSTALL.md
+        
+        echo "📝 Installation guide created"
 
     - name: Upload Artifacts to Existing Release
       run: |

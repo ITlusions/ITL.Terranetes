@@ -80,11 +80,16 @@ jobs:
       - name: Get Terranetes Controller version
         id: get-version
         run: |
-          # Extract Terranetes controller version directly from Chart.yaml dependencies
-          CONTROLLER_VERSION=$(grep -A3 'name: terranetes-controller' chart/Chart.yaml | grep 'version:' | awk '{print $2}' | tr -d '"' | sed 's/^v//')
-          echo "Found Terranetes Controller version: $CONTROLLER_VERSION"
+          # Extract Terranetes controller chart version from Chart.yaml dependencies
+          CHART_VERSION=$(grep -A3 'name: terranetes-controller' chart/Chart.yaml | grep 'version:' | awk '{print $2}' | tr -d '"')
+          echo "Found Terranetes Controller chart version: $CHART_VERSION"
           
-          echo "controller-version=$CONTROLLER_VERSION" >> $GITHUB_OUTPUT
+          # Get the corresponding app version from the Helm repository
+          helm repo add appvia https://terranetes-controller.appvia.io --force-update
+          APP_VERSION=$(helm show chart appvia/terranetes-controller --version $CHART_VERSION | grep '^appVersion:' | awk '{print $2}' | sed 's/^v//')
+          echo "Found Terranetes Controller app version: $APP_VERSION"
+          
+          echo "controller-version=$APP_VERSION" >> $GITHUB_OUTPUT
           
       - name: Scan Terranetes Controller image
         uses: aquasecurity/trivy-action@master

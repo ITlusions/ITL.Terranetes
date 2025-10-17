@@ -274,7 +274,7 @@ itl:
     realm:
       name: "ITL-Academy"
       displayName: "ITL Academy"
-      enabled: true
+      enabled: false
       # Realm-specific settings
       settings:
         # User registration settings
@@ -408,7 +408,7 @@ itl:
           
       # GitHub integration for external instructors
       github:
-        enabled: true
+        enabled: false
         alias: "github"
         displayName: "GitHub"
         config:
@@ -424,7 +424,7 @@ itl:
       name: "itlusions"
       # Theme deployment
       deployment:
-        enabled: true
+        enabled: false
         # Reference to theme ConfigMap or Secret
         source:
           type: "configmap"
@@ -434,7 +434,7 @@ itl:
   providers:
     # Enable cloud providers commonly used by ITL
     azure:
-      enabled: true
+      enabled: false
       secretName: "azure-credentials"
     aws:
       enabled: false
@@ -546,7 +546,7 @@ itl:
 monitoring:
   # Enable Prometheus monitoring
   prometheus:
-    enabled: true
+    enabled: false
     serviceMonitor:
       enabled: true
       labels:
@@ -554,7 +554,7 @@ monitoring:
         
   # Enable Grafana dashboards
   grafana:
-    enabled: true
+    enabled: false
     dashboards:
       enabled: true
 
@@ -569,7 +569,7 @@ backup:
 security:
   # Enable network policies
   networkPolicies:
-    enabled: true
+    enabled: false
     
   # Pod security standards
   podSecurity:
@@ -584,7 +584,7 @@ security:
 integrations:
   # ArgoCD for GitOps
   argocd:
-    enabled: true
+    enabled: false
     namespace: "argocd"
     
   # Grafana for monitoring

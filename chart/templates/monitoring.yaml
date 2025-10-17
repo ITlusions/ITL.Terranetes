@@ -148,7 +148,7 @@ data:
             "targets": [
               {
                 "expr": "sum(terranetes_cost_estimate{organization=\"ITL Academy\"}) by (environment)",
-                "legendFormat": "{{environment}}"
+                "legendFormat": "{{ "{{environment}}" }}"
               }
             ],
             "fieldConfig": {
@@ -172,7 +172,7 @@ data:
             "targets": [
               {
                 "expr": "sum(terranetes_configuration_total{organization=\"ITL Academy\"}) by (status, environment)",
-                "legendFormat": "{{environment}} - {{status}}"
+                "legendFormat": "{{ "{{environment}} - {{status}}" }}"
               }
             ],
             "options": {

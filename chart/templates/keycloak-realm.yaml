@@ -18,7 +18,7 @@ spec:
   
   variables:
     # Basic realm configuration
-    realm: {{ .Values.itl.keycloak.realm.name | quote }}
+    realm_name: {{ .Values.itl.keycloak.realm.name | quote }}
     display_name: {{ .Values.itl.keycloak.realm.displayName | quote }}
     enabled: {{ .Values.itl.keycloak.realm.enabled }}
     

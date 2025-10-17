@@ -147,3 +147,123 @@ groups:
 groups: []
 {{- end }}
 {{- end }}
+
+{{/*
+Generate policy configuration
+*/}}
+{{- define "itl-terranetes.policyConfig" }}
+{{- if .Values.itl.policies }}
+enabled: {{ .Values.itl.policies.enabled | default true }}
+{{- if .Values.itl.policies.source }}
+source: {{ .Values.itl.policies.source | quote }}
+{{- end }}
+{{- if .Values.itl.policies.rules }}
+rules:
+{{- range .Values.itl.policies.rules }}
+  - name: {{ .name | quote }}
+    severity: {{ .severity | default "warning" | quote }}
+    {{- if .description }}
+    description: {{ .description | quote }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- else }}
+enabled: false
+{{- end }}
+{{- end }}
+
+{{/*
+Generate module registry configuration
+*/}}
+{{- define "itl-terranetes.moduleRegistry" }}
+{{- if .Values.itl.modules }}
+enabled: {{ .Values.itl.modules.registry.enabled | default true }}
+{{- if .Values.itl.modules.registry.url }}
+url: {{ .Values.itl.modules.registry.url | quote }}
+{{- end }}
+{{- if .Values.itl.modules.common }}
+common:
+{{- range .Values.itl.modules.common }}
+  - name: {{ .name | quote }}
+    source: {{ .source | quote }}
+    {{- if .version }}
+    version: {{ .version | quote }}
+    {{- end }}
+{{- end }}
+{{- end }}
+{{- else }}
+enabled: false
+{{- end }}
+{{- end }}
+
+{{/*
+Generate contexts configuration
+*/}}
+{{- define "itl-terranetes.contexts" }}
+{{- if .Values.itl.contexts }}
+{{- if .Values.itl.contexts.development }}
+development:
+  enabled: {{ .Values.itl.contexts.development.enabled | default false }}
+  {{- if .Values.itl.contexts.development.namespace }}
+  namespace: {{ .Values.itl.contexts.development.namespace | quote }}
+  {{- end }}
+{{- end }}
+{{- if .Values.itl.contexts.production }}
+production:
+  enabled: {{ .Values.itl.contexts.production.enabled | default false }}
+  {{- if .Values.itl.contexts.production.namespace }}
+  namespace: {{ .Values.itl.contexts.production.namespace | quote }}
+  {{- end }}
+{{- end }}
+{{- else }}
+development:
+  enabled: false
+production:
+  enabled: false
+{{- end }}
+{{- end }}
+
+{{/*
+Generate integrations configuration
+*/}}
+{{- define "itl-terranetes.integrations" }}
+{{- if .Values.integrations }}
+{{- if .Values.integrations.argocd }}
+argocd:
+  enabled: {{ .Values.integrations.argocd.enabled | default false }}
+  {{- if .Values.integrations.argocd.namespace }}
+  namespace: {{ .Values.integrations.argocd.namespace | quote }}
+  {{- end }}
+{{- end }}
+{{- if .Values.integrations.grafana }}
+grafana:
+  enabled: {{ .Values.integrations.grafana.enabled | default false }}
+  {{- if .Values.integrations.grafana.namespace }}
+  namespace: {{ .Values.integrations.grafana.namespace | quote }}
+  {{- end }}
+{{- end }}
+{{- if .Values.integrations.prometheus }}
+prometheus:
+  enabled: {{ .Values.integrations.prometheus.enabled | default false }}
+  {{- if .Values.integrations.prometheus.namespace }}
+  namespace: {{ .Values.integrations.prometheus.namespace | quote }}
+  {{- end }}
+{{- end }}
+{{- if .Values.integrations.keycloak }}
+keycloak:
+  enabled: {{ .Values.integrations.keycloak.enabled | default false }}
+  {{- if .Values.integrations.keycloak.url }}
+  url: {{ .Values.integrations.keycloak.url | quote }}
+  {{- end }}
+{{- end }}
+{{- else }}
+argocd:
+  enabled: false
+grafana:
+  enabled: false
+prometheus:
+  enabled: false
+keycloak:
+  enabled: false
+{{- end }}
+{{- end }}

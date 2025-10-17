@@ -83,11 +83,24 @@ helm install terranetes itl-terranetes/itl-terranetes-controller \
 ### Install from GitHub Container Registry (OCI)
 
 ```bash
-# Install directly from GitHub Container Registry
+# Install specific version from GitHub Container Registry
 helm install terranetes oci://ghcr.io/itlusions/helm/terranetes \
   --version v0.1.0 \
   --create-namespace \
   --namespace terraform-system \
+  --values values.yaml
+```
+
+### Install Latest Version
+
+```bash
+# Install latest version from GitHub Container Registry
+helm install terranetes oci://ghcr.io/itlusions/helm/terranetes \
+  --version latest \
+  --create-namespace \
+  --namespace terraform-system \
+  --values values.yaml
+```
   --values values.yaml
 ```
 

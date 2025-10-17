@@ -158,6 +158,25 @@ terranetes-controller:
         - all
   # Allows to you deploy a number of providers into the clusters
   providers:
+    - name: keycloak
+      summary: "Keycloak Identity and Access Management provider"
+      source: secret
+      labels:
+        app.kubernetes.io/component: keycloak-provider
+        itl.academy/provider: keycloak
+      annotations:
+        description: "Terraform provider for managing Keycloak resources"
+      # The cloud vendor this credentials is for (custom for keycloak)
+      provider: keycloak
+      # Secret containing Keycloak provider configuration
+      secret: keycloak-terraform-provider
+      # Additional provider configuration
+      configuration:
+        url: "https://sts.itlusions.com"
+        client_id: "terraform-admin"
+        realm: "master"
+        # client_secret will come from the secret
+        # Using client credentials flow for authentication
   #  - name: aws
   #    summary: A summary for this provider
   #    source: injected
@@ -264,17 +283,17 @@ itl:
       url: "https://sts.itlusions.com"
       # Keycloak admin realm
       adminRealm: "master"
-      # Reference to Keycloak admin credentials
+      # Reference to Keycloak admin credentials (using client credentials)
       adminCredentials:
-        secretName: "keycloak-admin-credentials"
-        usernameKey: "username"
-        passwordKey: "password"
+        secretName: "keycloak-terraform-provider"
+        clientIdKey: "client_id"
+        clientSecretKey: "client_secret"
     
     # ITL Academy realm configuration
     realm:
       name: "ITL-Academy"
       displayName: "ITL Academy"
-      enabled: false
+      enabled: true
       # Realm-specific settings
       settings:
         # User registration settings
@@ -302,7 +321,7 @@ itl:
       # Terranetes Controller client
       - name: "terranetes-controller"
         clientId: "terranetes-controller"
-        enabled: true
+        enabled: false
         protocol: "openid-connect"
         # Client access type
         publicClient: false
@@ -322,7 +341,7 @@ itl:
       # ITL Documentation Hub client
       - name: "itl-docs-hub"
         clientId: "itl-docs-hub"
-        enabled: true
+        enabled: false
         protocol: "openid-connect"
         publicClient: false
         standardFlowEnabled: true
@@ -333,7 +352,7 @@ itl:
           - "docs-editor"
           - "docs-viewer"
           
-      # Student Portal client
+      # Student Portal client (SPA Example)
       - name: "student-portal"
         clientId: "student-portal"
         enabled: true
@@ -341,7 +360,11 @@ itl:
         publicClient: true
         standardFlowEnabled: true
         redirectUris:
-          - "https://portal.itlusions.com/*"
+          - "https://portal.itlusions.com/auth/callback"
+          - "http://localhost:3000/auth/callback"
+        webOrigins:
+          - "https://portal.itlusions.com"
+          - "http://localhost:3000"
         roles:
           - "student"
           - "instructor"
@@ -491,14 +514,32 @@ itl:
     # Private ITL module registry
     registry:
       enabled: true
-      url: "git::https://github.com/itlusions/terraform-modules.git"
+      url: "git::https://github.com/ITlusions/ITL.Terranetes.Modules.git"
       
     # Common ITL modules
     common:
+      # Keycloak modules for authentication and authorization
+      - name: "keycloak-realm"
+        source: "git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/realm"
+        description: "Create and manage Keycloak realms with ITL standards"
+        version: "v1.0.0"
+        
+      - name: "keycloak-client"
+        source: "git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/client"
+        description: "Create and manage Keycloak OpenID Connect clients"
+        version: "v1.0.0"
+        
+      # Infrastructure modules
       - name: "azure-vm"
-        source: "git::https://github.com/itlusions/terraform-modules.git//azure-vm"
+        source: "git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//azure/vm"
+        description: "Azure Virtual Machine with ITL standards"
+        version: "v1.0.0"
+        
       - name: "azure-storage"
-        source: "git::https://github.com/itlusions/terraform-modules.git//azure-storage"
+        source: "git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//azure/storage"
+        description: "Azure Storage Account with ITL standards"
+        version: "v1.0.0"
+        
       - name: "kubernetes-namespace"
         source: "git::https://github.com/itlusions/terraform-modules.git//k8s-namespace"
         
@@ -601,3 +642,92 @@ integrations:
   keycloak:
     enabled: false
     namespace: "keycloak"
+
+# Keycloak Clients Configuration
+# Configure multiple Keycloak clients that will be managed by Terranetes
+keycloakClients:
+  # Example web application client
+  jupyterhub-client:
+    enabled: false
+    realmId: "itl-academy"
+    clientId: "jupyterhub"
+    displayName: "JupyterHub"
+    accessType: "CONFIDENTIAL"
+    redirectUris:
+      - "https://jupyter.itlusions.com/hub/oauth-callback"
+    webOrigins:
+      - "https://jupyter.itlusions.com"
+    roles:
+      - name: "admin"
+        description: "JupyterHub administrator"
+      - name: "instructor"
+        description: "Teaching privileges"
+      - name: "student"
+        description: "Student access"
+    defaultScopes:
+      - "profile"
+      - "email"
+      - "roles"
+    providerRef:
+      name: "keycloak"
+      namespace: "terraform-system"
+    
+  # Example API service client
+  grafana-client:
+    enabled: false
+    realmId: "itl-academy"
+    clientId: "grafana"
+    displayName: "Grafana Monitoring"
+    accessType: "CONFIDENTIAL"
+    serviceAccountsEnabled: true
+    redirectUris:
+      - "https://grafana.itlusions.com/login/generic_oauth"
+    defaultScopes:
+      - "profile"
+      - "email"
+      - "roles"
+    providerRef:
+      name: "keycloak"
+      namespace: "terraform-system"
+      
+  # Example mobile app client
+  mobile-app-client:
+    enabled: false
+    realmId: "itl-academy"
+    clientId: "itl-mobile-app"
+    displayName: "ITL Mobile App"
+    accessType: "PUBLIC"
+    pkceMethod: "S256"
+    redirectUris:
+      - "com.itlusions.app://oauth-callback"
+    roles:
+      - name: "mobile-user"
+        description: "Mobile app user"
+    providerRef:
+      name: "keycloak"
+      namespace: "terraform-system"
+      
+  # Example SPA client
+  portal-spa-client:
+    enabled: false
+    realmId: "itl-academy"
+    clientId: "itl-portal-spa"
+    displayName: "ITL Portal SPA"
+    accessType: "PUBLIC"
+    pkceMethod: "S256"
+    standardFlowEnabled: true
+    implicitFlowEnabled: false
+    directAccessGrantsEnabled: false
+    redirectUris:
+      - "https://portal.itlusions.com/auth/callback"
+      - "http://localhost:3000/auth/callback"  # For development
+    webOrigins:
+      - "https://portal.itlusions.com"
+      - "http://localhost:3000"  # For development
+    defaultScopes:
+      - "profile"
+      - "email"
+      - "roles"
+    providerRef:
+      name: "keycloak"
+      namespace: "terraform-system"

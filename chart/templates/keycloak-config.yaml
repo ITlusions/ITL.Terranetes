@@ -55,7 +55,7 @@ data:
   {{- end }}
 
 ---
-{{- if .Values.itl.keycloak.server.adminCredentials }}
+{{- if and .Values.itl.keycloak.server.adminCredentials .Values.itl.keycloak.server.adminCredentials.secretName }}
 # Reference to Keycloak admin credentials secret
 apiVersion: v1
 kind: Secret
@@ -130,9 +130,11 @@ spec:
       value: {{ .Values.itl.environment.name | quote }}
   
   {{- if .Values.itl.keycloak.server.adminCredentials }}
+  {{- if .Values.itl.keycloak.server.adminCredentials.secretName }}
   envFrom:
     - secretRef:
         name: {{ .Values.itl.keycloak.server.adminCredentials.secretName }}
+  {{- end }}
   {{- end }}
   
   writeConnectionSecretsToRef:
@@ -252,6 +254,7 @@ spec:
     {{- end }}
   
   {{- if .Values.itl.keycloak.server.adminCredentials }}
+  {{- if .Values.itl.keycloak.server.adminCredentials.secretName }}
   envFrom:
     - secretRef:
         name: {{ .Values.itl.keycloak.server.adminCredentials.secretName }}
@@ -264,6 +267,7 @@ spec:
     - secretRef:
         name: github-oauth-credentials
     {{- end }}
+  {{- end }}
   {{- end }}
   
   writeConnectionSecretsToRef:

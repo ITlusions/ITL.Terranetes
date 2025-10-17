@@ -13,7 +13,7 @@ metadata:
     itl.academy/client-name: {{ $client.name | quote }}
     itl.academy/client-id: {{ $client.clientId | quote }}
 spec:
-  module: git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/client?ref=v1.0.0
+  module: git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/client?ref=main
   
   providerRef:
     name: keycloak

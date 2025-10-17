@@ -1,23 +1,67 @@
 # Keycloak Modules for ITL Terranetes
 
-This document describes the Keycloak integration modules available in the ITL Terranetes chart. These modules provide comprehensive Keycloak management through Terraform using the Terranetes controller.
+This document describes the Keycloak integration modules available via ITL Terranetes. These modules provide comprehensive Keycloak management via Terraform using the Terranetes controller.
 
 ## Overview
 
-The ITL Terranetes chart includes several Keycloak-related Terraform modules to manage authentication and authorization infrastructure:
+ITL Terranetes contains various Keycloak-related Terraform modules for authentication and authorization infrastructure:
 
-- **keycloak-server**: Deploy and configure Keycloak server
-- **keycloak-realm**: Manage Keycloak realms with ITL-specific settings
-- **keycloak-client**: Create and configure application clients
-- **keycloak-identity-provider**: Set up external identity providers (Azure AD, GitHub)
-- **keycloak-theme**: Deploy ITL-branded themes
-- **keycloak-backup**: Configure automated backup solutions
+- **keycloak/realm**: Manage Keycloak realms with ITL-specific settings  
+- **keycloak/client**: Create and configure application clients
+- **keycloak/user**: User management and configuration
+- **keycloak/group**: Group management and role assignments
 
-## Module Configuration
+## Client Types and Use Cases
 
-### Enabling Keycloak Modules
+### 1. Web Application Clients
+For frontend web applications using authorization code flow:
 
-In your `values.yaml`:
+**Characteristics:**
+- `access_type: "CONFIDENTIAL"`
+- `standard_flow_enabled: true`
+- Redirect URIs required
+- Client secret stored securely
+
+**Examples:**
+- ITL Portal (student portal)
+- JupyterHub (development environment)
+- Grafana (monitoring dashboard)
+
+### 2. API Service Clients  
+For backend services with service accounts:
+
+**Characteristics:**
+- `access_type: "CONFIDENTIAL"`
+- `service_accounts_enabled: true`
+- No redirect URIs needed
+- Machine-to-machine authentication
+
+**Examples:**
+- REST API services
+- Microservices integration
+- Automated systems
+
+### 3. Mobile App Clients
+For mobile applications (public clients):
+
+**Characteristics:**
+- `access_type: "PUBLIC"`
+- PKCE code challenge required
+- Custom URI schemes for redirects
+- No client secret
+
+**Examples:**
+- ITL Mobile App
+- Student companion apps
+
+### 4. Single Page Applications (SPA)
+For JavaScript frontend applications:
+
+**Characteristics:**
+- `access_type: "PUBLIC"`
+- `standard_flow_enabled: true`
+- CORS configuration important
+- Short token lifetime
 
 ```yaml
 itl:

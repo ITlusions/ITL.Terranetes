@@ -1,0 +1,112 @@
+apiVersion: terraform.appvia.io/v1alpha1
+kind: Configuration
+metadata:
+  name: api-service-client
+  namespace: terraform-system
+  labels:
+    app.kubernetes.io/name: api-service-client
+    app.kubernetes.io/component: keycloak-client
+    app.kubernetes.io/part-of: itl-api-platform
+    itl.academy/managed-by: terranetes
+    itl.academy/environment: production
+    itl.academy/service: api
+spec:
+  # Gebruik de ITL Keycloak Client module
+  module: git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/client?ref=v1.0.0
+  
+  # Provider referentie
+  providerRef:
+    name: keycloak
+    namespace: terraform-system
+  
+  # Afhankelijkheden
+  dependsOn:
+    - name: itl-academy-realm
+      namespace: terraform-system
+  
+  # Module variabelen voor API service
+  variables:
+    realm_id: "itl-academy"
+    
+    # API service configuratie
+    client_id: "itl-api-service"
+    name: "ITL API Service"
+    description: "Backend API service voor ITL Academy applicaties"
+    enabled: true
+    
+    # Service account configuratie
+    access_type: "CONFIDENTIAL"
+    service_accounts_enabled: true       # Belangrijk voor API services
+    
+    # Flow configuratie voor service-to-service
+    standard_flow_enabled: false         # Niet nodig voor API services
+    implicit_flow_enabled: false
+    direct_access_grants_enabled: false
+    
+    # Geen redirect URLs nodig voor service accounts
+    valid_redirect_uris: []
+    web_origins: []
+    
+    # Token configuratie voor API gebruik
+    access_token_lifespan: 3600          # 1 uur voor API calls
+    
+    # Service-specifieke scopes
+    default_client_scopes:
+      - "profile"
+      - "email"
+      - "roles"
+    
+    # API service rollen
+    create_roles:
+      - name: "api-admin"
+        description: "API service administrator"
+      - name: "data-reader"
+        description: "Kan data lezen via API"
+      - name: "data-writer"
+        description: "Kan data schrijven via API"
+      - name: "system-integration"
+        description: "Systeem integratie toegang"
+    
+    # ITL tags voor API service
+    itl_tags:
+      "itl.academy/environment": "production"
+      "itl.academy/service": "api"
+      "itl.academy/owner": "backend-team"
+      "itl.academy/managed-by": "terranetes"
+      "itl.academy/api-version": "v1"
+
+  # Service account credentials output
+  writeConnectionSecretsToRef:
+    name: api-service-client-outputs
+    namespace: terraform-system
+
+  enableDriftDetection: true
+  
+  policy:
+    external:
+      source: https://github.com/ITlusions/terraform-policies
+      selector:
+        - "keycloak"
+        - "service-account"
+        - "api-security"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: api-service-config
+  namespace: default
+  labels:
+    app.kubernetes.io/name: api-service-config
+    itl.academy/managed-by: terranetes
+stringData:
+  # Deze waarden komen van de Terranetes output
+  KEYCLOAK_URL: "https://sts.itlusions.com"
+  KEYCLOAK_REALM: "itl-academy"
+  KEYCLOAK_CLIENT_ID: "itl-api-service"
+  # CLIENT_SECRET wordt gevuld door Terranetes output
+  KEYCLOAK_CLIENT_SECRET: "${SECRET_api-service-client-outputs_client_secret}"
+  
+  # API service configuratie
+  TOKEN_ENDPOINT: "${SECRET_api-service-client-outputs_token_endpoint}"
+  USERINFO_ENDPOINT: "${SECRET_api-service-client-outputs_userinfo_endpoint}"

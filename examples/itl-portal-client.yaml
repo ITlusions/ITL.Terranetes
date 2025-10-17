@@ -1,0 +1,142 @@
+apiVersion: terraform.appvia.io/v1alpha1
+kind: Configuration
+metadata:
+  name: itl-portal-client
+  namespace: terraform-system
+  labels:
+    app.kubernetes.io/name: itl-portal-client
+    app.kubernetes.io/component: keycloak-client
+    app.kubernetes.io/part-of: itl-web-platform
+    itl.academy/managed-by: terranetes
+    itl.academy/environment: production
+    itl.academy/service: portal
+spec:
+  # Gebruik de ITL Keycloak Client module
+  module: git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/client?ref=v1.0.0
+  
+  # Provider referentie
+  providerRef:
+    name: keycloak
+    namespace: terraform-system
+  
+  # Afhankelijkheden - wacht tot realm bestaat
+  dependsOn:
+    - name: itl-academy-realm
+      namespace: terraform-system
+  
+  # Module variabelen
+  variables:
+    # Realm configuratie
+    realm_id: "itl-academy"
+    
+    # Client basis configuratie
+    client_id: "itl-portal"
+    name: "ITL Academy Portal"
+    description: "Hoofd web portal voor ITL Academy studenten en instructeurs"
+    enabled: true
+    
+    # Access type voor web applicatie
+    access_type: "CONFIDENTIAL"
+    
+    # Flow configuratie
+    standard_flow_enabled: true          # Authorization code flow
+    implicit_flow_enabled: false         # Niet veilig voor web apps
+    direct_access_grants_enabled: false  # Geen username/password flow
+    service_accounts_enabled: false      # Geen service account nodig
+    
+    # URLs voor de portal
+    valid_redirect_uris:
+      - "https://portal.itlusions.com/auth/callback"
+      - "https://portal.itlusions.com/auth/logout-callback"
+      - "http://localhost:3000/auth/callback"  # Voor development
+    
+    web_origins:
+      - "https://portal.itlusions.com"
+      - "http://localhost:3000"  # Voor development
+    
+    base_url: "https://portal.itlusions.com"
+    admin_url: "https://portal.itlusions.com/admin"
+    root_url: "https://portal.itlusions.com"
+    
+    # Session configuratie
+    access_token_lifespan: 1800          # 30 minuten
+    client_session_idle_timeout: 1800    # 30 minuten
+    client_session_max_lifespan: 28800   # 8 uur
+    
+    # Consent instellingen
+    consent_required: false
+    display_on_consent_screen: true
+    
+    # Client scopes
+    default_client_scopes:
+      - "profile"
+      - "email"
+      - "roles"
+      - "web-origins"
+      - "itl-profile"  # ITL-specifieke profile info
+    
+    optional_client_scopes:
+      - "address"
+      - "phone"
+      - "offline_access"
+    
+    # Portal-specifieke rollen
+    create_roles:
+      - name: "portal-admin"
+        description: "Portal administrator met volledige toegang"
+      - name: "instructor"
+        description: "Instructeur met toegang tot cursus management"
+      - name: "student"
+        description: "Student met toegang tot leermateriaal"
+      - name: "guest"
+        description: "Gast gebruiker met beperkte toegang"
+    
+    # Protocol mappers voor extra claims
+    protocol_mappers:
+      - name: "student-id-mapper"
+        protocol: "openid-connect"
+        protocol_mapper: "oidc-usermodel-attribute-mapper"
+        config:
+          "user.attribute": "studentId"
+          "claim.name": "student_id"
+          "claim.value.type": "String"
+          "access.token.claim": "true"
+          "id.token.claim": "true"
+          "userinfo.token.claim": "true"
+      
+      - name: "department-mapper"
+        protocol: "openid-connect"
+        protocol_mapper: "oidc-usermodel-attribute-mapper"
+        config:
+          "user.attribute": "department"
+          "claim.name": "department"
+          "claim.value.type": "String"
+          "access.token.claim": "true"
+          "id.token.claim": "true"
+          "userinfo.token.claim": "true"
+    
+    # ITL standaard tags
+    itl_tags:
+      "itl.academy/environment": "production"
+      "itl.academy/service": "portal"
+      "itl.academy/owner": "web-team"
+      "itl.academy/managed-by": "terranetes"
+      "itl.academy/cost-center": "education"
+      "itl.academy/data-classification": "internal"
+
+  # Schrijf outputs voor gebruik door andere resources
+  writeConnectionSecretsToRef:
+    name: itl-portal-client-outputs
+    namespace: terraform-system
+
+  # Activeer drift detection
+  enableDriftDetection: true
+  
+  # Policy validatie
+  policy:
+    external:
+      source: https://github.com/ITlusions/terraform-policies
+      selector:
+        - "keycloak"
+        - "oidc-client"
+        - "web-security"

@@ -19,6 +19,97 @@ Terranetes is a Kubernetes-native solution that enables teams to provision and m
 - **Network Security**: Enhanced network policies and pod security standards
 - **Multi-Namespace Support**: Single controller manages configurations across all namespaces
 
+## Default Deployments
+
+When you deploy the ITL Terranetes chart with default configuration, the following resources are created by default:
+
+### ✅ **Always Deployed (Default: Enabled)**
+
+#### Core Terranetes Components
+- **Terranetes Controller** - Main controller deployment with 2 replicas for HA
+- **ServiceAccount & RBAC** - Controller and executor service accounts with cluster-wide permissions
+- **Webhooks** - Admission controllers for Configuration and Revision validation
+- **NetworkPolicies** - Security policies allowing controller and executor communication
+- **ConfigMaps** - Helm template overrides and job configurations
+
+#### ITL-Specific Resources  
+- **Keycloak Provider** - Terraform provider configuration for Keycloak authentication
+- **ITL Academy Realm** - Keycloak realm (`ITL-Academy`) with ITL-specific settings
+- **Student Portal Client** - Default SPA client for the student portal application
+- **Backup CronJob** - Automated backup of Terraform state every 6 hours
+- **Monitoring Resources** - ServiceMonitor for Prometheus metrics collection
+
+### ⚠️ **Conditionally Deployed (Default: Disabled)**
+
+#### Additional Keycloak Clients
+- **Terranetes Controller Client** - OIDC client for controller authentication (`enabled: false`)
+- **ITL Documentation Hub Client** - Client for docs portal (`enabled: false`)
+
+#### Cloud Provider Support
+- **Azure Provider** - Azure credentials and provider configuration (`enabled: false`)
+- **AWS Provider** - AWS credentials and provider configuration (`enabled: false`)
+- **Google Cloud Provider** - GCP credentials and provider configuration (`enabled: false`)
+
+#### Monitoring & Observability
+- **Prometheus Integration** - Full Prometheus monitoring stack (`enabled: false`)
+- **Grafana Dashboards** - Infrastructure monitoring dashboards (`enabled: false`)
+- **Grafana Client** - Keycloak OIDC client for Grafana (`enabled: false`)
+
+#### Additional Features
+- **Security Scanning** - Checkov policy enforcement (`security.imageScanning: true`)
+- **Cost Management** - Infracost integration (`costs.enabled: false`)
+- **ArgoCD Integration** - GitOps workflow integration (`integrations.argocd.enabled: false`)
+
+### 📋 **Resource Summary by Namespace**
+
+#### `terraform-system` (Controller Namespace)
+```
+Deployments: terranetes-controller
+Services: terranetes-controller, terranetes-controller-webhooks
+Secrets: keycloak-terraform-provider, ca-certificates
+ConfigMaps: terranetes-controller-config, job-templates
+NetworkPolicies: terranetes-controller-network-policy
+CronJobs: terraform-state-backup
+ServiceMonitors: terranetes-controller-metrics
+```
+
+#### `itl-academy` Realm (Keycloak Resources)
+```
+Configurations: itl-academy-realm, student-portal
+Secrets: itl-academy-realm-outputs, student-portal-outputs
+```
+
+### 🔧 **To Enable Optional Resources**
+
+To enable additional components, update your `values.yaml`:
+
+```yaml
+# Enable additional Keycloak clients
+itl:
+  keycloak:
+    clients:
+      - name: "terranetes-controller"
+        enabled: true  # Enable controller OIDC client
+
+# Enable cloud provider support
+itl:
+  providers:
+    azure:
+      enabled: true  # Enable Azure provider
+
+# Enable monitoring stack
+monitoring:
+  prometheus:
+    enabled: true  # Enable Prometheus integration
+  grafana:
+    enabled: true  # Enable Grafana dashboards
+
+# Enable additional integrations
+integrations:
+  argocd:
+    enabled: true  # Enable ArgoCD integration
+```
+
 ## Architecture
 
 ```

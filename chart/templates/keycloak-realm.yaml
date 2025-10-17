@@ -10,7 +10,7 @@ metadata:
     itl.academy/component: keycloak-realm
     itl.academy/realm: {{ .Values.itl.keycloak.realm.name | quote }}
 spec:
-  module: git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/realm?ref=v1.0.0
+  module: git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/realm?ref=main
   
   providerRef:
     name: keycloak

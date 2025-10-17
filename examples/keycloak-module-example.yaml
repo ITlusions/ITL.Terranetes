@@ -1,0 +1,54 @@
+apiVersion: terraform.appvia.io/v1alpha1
+kind: Configuration
+metadata:
+  name: keycloak-realm-module-example
+  namespace: terraform-system
+  labels:
+    app.kubernetes.io/name: keycloak-realm-example
+    app.kubernetes.io/component: keycloak-realm
+    app.kubernetes.io/part-of: itl-identity-platform
+    itl.academy/managed-by: terranetes
+    itl.academy/environment: production
+spec:
+  # Use the ITL Keycloak Realm module from the new repository
+  module: git::https://github.com/ITlusions/ITL.Terranetes.Modules.git//keycloak/realm?ref=v1.0.0
+  
+  # Provider Reference
+  providerRef:
+    name: keycloak
+    namespace: terraform-system
+  
+  # Module variables
+  variables:
+    realm_name: "itl-example"
+    display_name: "ITL Example Realm"
+    enabled: true
+    
+    # Security settings
+    brute_force_protected: true
+    failure_factor: 5
+    
+    # Session settings
+    sso_session_idle_timeout: 1800   # 30 minutes
+    sso_session_max_lifespan: 36000  # 10 hours
+    
+    # ITL tags
+    itl_tags:
+      "itl.academy/environment": "production"
+      "itl.academy/owner": "platform-team"
+      "itl.academy/managed-by": "terranetes"
+
+  # Write connection secrets for other resources to use
+  writeConnectionSecretsToRef:
+    name: keycloak-realm-example-outputs
+    namespace: terraform-system
+
+  # Enable drift detection
+  enableDriftDetection: true
+  
+  # Apply policy
+  policy:
+    external:
+      source: https://github.com/ITlusions/terraform-policies
+      selector:
+        - "keycloak"

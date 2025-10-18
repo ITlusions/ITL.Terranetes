@@ -1,0 +1,46 @@
+{{- if .Values.itl.keycloak.enabled }}
+---
+apiVersion: terraform.appvia.io/v1alpha1
+kind: Provider
+metadata:
+  name: keycloak
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "itl-terranetes-controller.labels" . | nindent 4 }}
+    itl.academy/component: "keycloak-provider"
+spec:
+  source: hashicorp/keycloak
+  version: "{{ .Values.itl.keycloak.provider.version | default "4.4.0" }}"
+  
+  # Provider configuration for Keycloak
+  configuration:
+    url: {{ .Values.itl.keycloak.server.url | quote }}
+    realm: {{ .Values.itl.keycloak.server.adminRealm | default "master" | quote }}
+    
+    # Client credentials authentication
+    client_id: {{ .Values.itl.keycloak.clientId | default "terraform-admin" | quote }}
+    client_secret: 
+      secretKeyRef:
+        name: {{ .Values.itl.keycloak.server.adminCredentials.secretName | default "keycloak-terraform-provider" }}
+        key: {{ .Values.itl.keycloak.server.adminCredentials.secretKey | default "client_secret" }}
+        namespace: {{ .Release.Namespace }}
+    
+    # Additional provider settings
+    client_timeout: {{ .Values.itl.keycloak.provider.clientTimeout | default 30 }}
+    tls_insecure_skip_verify: {{ .Values.itl.keycloak.provider.tlsInsecureSkipVerify | default false }}
+
+  # Summary configuration
+  summary:
+    description: "Keycloak provider for ITL Academy realm and client management"
+    
+  # Provider constraints and policies
+  {{- if .Values.itl.keycloak.provider.constraints }}
+  constraints:
+    {{- toYaml .Values.itl.keycloak.provider.constraints | nindent 4 }}
+  {{- end }}
+  
+  {{- if .Values.itl.keycloak.provider.policies }}
+  policies:
+    {{- toYaml .Values.itl.keycloak.provider.policies | nindent 4 }}
+  {{- end }}
+{{- end }}

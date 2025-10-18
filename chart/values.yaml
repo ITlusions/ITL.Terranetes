@@ -289,6 +289,20 @@ itl:
         clientIdKey: "client_id"
         clientSecretKey: "client_secret"
     
+    # Keycloak Terraform provider configuration
+    provider:
+      version: "4.4.0"
+      clientTimeout: 30
+      tlsInsecureSkipVerify: false
+      constraints:
+        # Require specific provider version
+        - expression: 'provider.version >= "4.0.0"'
+          description: "Minimum Keycloak provider version for ITL compatibility"
+      policies:
+        # Security policies for Keycloak provider usage
+        - name: "keycloak-security-policy"
+          description: "Enforce security best practices for Keycloak resources"
+    
     # ITL Academy realm configuration
     realm:
       name: "ITL-Academy"
@@ -316,6 +330,9 @@ itl:
       enabled: true
       secretName: "keycloak-client-secrets"
       
+    # Terraform client ID for provider authentication
+    clientId: "terraform-admin"
+    
     # Default clients for ITL applications
     clients:
       # Terranetes Controller client

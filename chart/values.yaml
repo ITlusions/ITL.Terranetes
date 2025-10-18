@@ -173,7 +173,7 @@ terranetes-controller:
       # Additional provider configuration
       configuration:
         url: "https://sts.itlusions.com"
-        client_id: "terraform-admin"
+        client_id: "terraform-provider"
         realm: "master"
         # client_secret will come from the secret
         # Using client credentials flow for authentication

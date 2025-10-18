@@ -157,26 +157,7 @@ terranetes-controller:
       drop:
         - all
   # Allows to you deploy a number of providers into the clusters
-  providers:
-    - name: keycloak
-      summary: "Keycloak Identity and Access Management provider"
-      source: secret
-      labels:
-        app.kubernetes.io/component: keycloak-provider
-        itl.academy/provider: keycloak
-      annotations:
-        description: "Terraform provider for managing Keycloak resources"
-      # The cloud vendor this credentials is for (custom for keycloak)
-      provider: keycloak
-      # Secret containing Keycloak provider configuration
-      secret: keycloak-terraform-provider
-      # Additional provider configuration
-      configuration:
-        url: "https://sts.itlusions.com"
-        client_id: "terraform-provider"
-        realm: "master"
-        # client_secret will come from the secret
-        # Using client credentials flow for authentication
+  providers: []
   #  - name: aws
   #    summary: A summary for this provider
   #    source: injected

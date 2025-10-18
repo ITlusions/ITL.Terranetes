@@ -33,14 +33,14 @@ spec:
               url: "https://sts.itlusions.com"
               adminRealm: "master"
               adminCredentials:
-                secretName: "keycloak-admin-credentials"
-                usernameKey: "username"
-                passwordKey: "password"
+                secretName: "keycloak-terraform-provider"
+                clientIdKey: "client_id"
+                clientSecretKey: "client_secret"
             realm:
               name: "ITL-Academy"
               displayName: "ITL Academy"
               enabled: true
-            clientId: "terranetes"
+            clientId: "terraform-admin"
             
           monitoring:
             enabled: true

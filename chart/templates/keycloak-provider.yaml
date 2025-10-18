@@ -6,7 +6,7 @@ metadata:
   name: keycloak
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "itl-terranetes-controller.labels" . | nindent 4 }}
+    {{- include "itl-terranetes.labels" . | nindent 4 }}
     itl.academy/component: "keycloak-provider"
 spec:
   source: hashicorp/keycloak

@@ -272,12 +272,12 @@ itl:
     
     # Keycloak Terraform provider configuration
     provider:
-      version: "4.4.0"
+      version: "5.5.0"
       clientTimeout: 30
       tlsInsecureSkipVerify: false
       constraints:
         # Require specific provider version
-        - expression: 'provider.version >= "4.0.0"'
+        - expression: 'provider.version >= "5.5.0"'
           description: "Minimum Keycloak provider version for ITL compatibility"
       policies:
         # Security policies for Keycloak provider usage

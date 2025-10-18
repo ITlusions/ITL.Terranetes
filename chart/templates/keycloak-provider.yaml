@@ -10,8 +10,8 @@ metadata:
     itl.academy/component: "keycloak-provider"
 spec:
   # Required: Source (provider name in terraform registry format)
-  source: mrparkers/keycloak
-  version: "{{ .Values.itl.keycloak.provider.version | default "4.4.0" }}"
+  source: keycloak/keycloak
+  version: "{{ .Values.itl.keycloak.provider.version | default "5.5.0" }}"
   
   # Required: Provider type
   provider: keycloak

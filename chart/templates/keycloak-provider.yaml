@@ -9,8 +9,12 @@ metadata:
     {{- include "itl-terranetes.labels" . | nindent 4 }}
     itl.academy/component: "keycloak-provider"
 spec:
-  source: hashicorp/keycloak
+  # Required: Source (provider name in terraform registry format)
+  source: keycloak/keycloak
   version: "{{ .Values.itl.keycloak.provider.version | default "4.4.0" }}"
+  
+  # Required: Provider type
+  provider: keycloak
   
   # Provider configuration for Keycloak
   configuration:
@@ -29,9 +33,8 @@ spec:
     client_timeout: {{ .Values.itl.keycloak.provider.clientTimeout | default 30 }}
     tls_insecure_skip_verify: {{ .Values.itl.keycloak.provider.tlsInsecureSkipVerify | default false }}
 
-  # Summary configuration
-  summary:
-    description: "Keycloak provider for ITL Academy realm and client management"
+  # Summary must be a string, not an object
+  summary: "Keycloak provider for ITL Academy realm and client management"
     
   # Provider constraints and policies
   {{- if .Values.itl.keycloak.provider.constraints }}
